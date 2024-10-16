@@ -26,8 +26,11 @@ version=$(<VERSION)
 #     ARCH_SUFFIX=""
 # fi
 
-tag="polusai/${tool_name}:${version}"
-# tag=$tag${ARCH_SUFFIX}
+# set the docker image name
+# Use the environment variable for the prefix if defined, otherwise default to 'polusai'
+org=${DOCKER_ORG:-polusai}
+tag="${org}/${tool_name}:${version}"
+tag=$tag${ARCH_SUFFIX}
 
 echo "Building docker image with tag: ${tag}"
 
@@ -41,7 +44,8 @@ cp -r ${repo_root}/common .
 cp -r ${repo_root}/${tool_dir}/* ${tool_dir}
 
 # build the docker image
-build_cmd="build --platform linux/amd64,linux/arm64 . -f ${tool_dir}/Dockerfile -t ${tag} --build-arg TOOL_DIR=${tool_dir}"
+build_cmd="build . -f ${tool_dir}/Dockerfile -t ${tag} --build-arg TOOL_DIR=${tool_dir}"
+# build_cmd="build --platform linux/amd64,linux/arm64 . -f ${tool_dir}/Dockerfile -t ${tag} --build-arg TOOL_DIR=${tool_dir}"
 echo "build docker image : $build_cmd"
 docker $build_cmd
 
