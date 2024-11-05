@@ -22,6 +22,8 @@ logger = get_logger("aithena_services.api")
 
 
 app = FastAPI()
+OLLAMA_MODELS = {"EMBED": OllamaEmbedding.list_models(), "CHAT": Ollama.list_models()}
+AZURE_MODELS = {"EMBED": AzureOpenAIEmbedding.list_models(), "CHAT": AzureOpenAI.list_models()}
 
 
 def check_platform(platform: str):
@@ -41,6 +43,22 @@ def test():
     logger.debug("Testing FastAPI deployment")
     return {"status": "success"}
 
+@app.put("/update")
+def update_model_lists():
+    """Update chat/embed model lists."""
+    try:
+        az = AzureOpenAI.list_models()
+        ol = Ollama.list_models()
+        OLLAMA_MODELS["CHAT"] = ol
+        AZURE_MODELS["CHAT"] = az
+        az = AzureOpenAIEmbedding.list_models()
+        ol = OllamaEmbedding.list_models()
+        OLLAMA_MODELS["EMBED"] = ol
+        AZURE_MODELS["EMBED"] = az
+    except Exception as exc:
+        logger.error(f"Error in updating model lists: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"status": "success"}
 
 @app.get("/chat/list")
 def list_chat_models():
@@ -48,6 +66,8 @@ def list_chat_models():
     try:
         az = AzureOpenAI.list_models()
         ol = Ollama.list_models()
+        OLLAMA_MODELS["CHAT"] = ol
+        AZURE_MODELS["CHAT"] = az
     except Exception as exc:
         logger.error(f"Error in listing chat models: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
@@ -60,12 +80,16 @@ def list_chat_models_by_platform(platform: str):
     check_platform(platform)
     if platform == "azure":
         try:
-            return AzureOpenAI.list_models()
+            r = AzureOpenAI.list_models()
+            AZURE_MODELS["CHAT"] = r
+            return r
         except Exception as exc:
             logger.error(f"Error in listing chat models in Azure: {exc}")
             raise HTTPException(status_code=400, detail=f"There was a problem listing chat models in Azure: {str(exc)}")
     try:
-        return Ollama.list_models()
+        r =  Ollama.list_models()
+        OLLAMA_MODELS["CHAT"] = r
+        return r
     except Exception as exc:
         logger.error(f"Error in listing chat models in Ollama: {exc}")
         raise HTTPException(status_code=400, detail=f"There was a problem listing chat models in Ollama: {str(exc)}")
@@ -76,6 +100,8 @@ def list_embed_models():
     """List all available embed models."""
     az = AzureOpenAIEmbedding.list_models()
     ol = OllamaEmbedding.list_models()
+    OLLAMA_MODELS["EMBED"] = ol
+    AZURE_MODELS["EMBED"] = az
     return [*az, *ol]
 
 
@@ -85,25 +111,29 @@ def list_embed_models_by_platform(platform: str):
     check_platform(platform)
     if platform == "azure":
         try:
-            return AzureOpenAIEmbedding.list_models()
+            r =  AzureOpenAIEmbedding.list_models()
+            AZURE_MODELS["EMBED"] = r
+            return r
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"There was a problem listing embed models in Azure: {str(exc)}")
     try:
-        return OllamaEmbedding.list_models()
+        r = OllamaEmbedding.list_models()
+        OLLAMA_MODELS["EMBED"] = r
+        return r
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"There was a problem listing embed models in Ollama: {str(exc)}")
 
 def resolve_client_chat(model: str, num_ctx: Optional[int]):
     """Resolve client for chat models."""
-    if model in AzureOpenAI.list_models():
+    if model in AZURE_MODELS["CHAT"]:
         try:
             return AzureOpenAI(deployment=model)
         except Exception as exc:
             logger.error(f"Error in resolving Azure client for model: {model}")
             raise HTTPException(status_code=400, detail=f"Error in resolving Azure chat client for model: {model}, {str(exc)}") 
-    if f"{model}:latest" in Ollama.list_models():
+    if f"{model}:latest" in OLLAMA_MODELS["CHAT"]:
         return resolve_client_chat(f"{model}:latest", num_ctx)
-    if model in Ollama.list_models():
+    if model in OLLAMA_MODELS["CHAT"]:
         try:
             if num_ctx:
                 return Ollama(model=model, context_window=num_ctx, request_timeout=500)
@@ -121,19 +151,19 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
 
 def resolve_client_embed(model: str):
     """Resolve client for embed models."""
-    if model in AzureOpenAIEmbedding.list_models():
+    if model in AZURE_MODELS["EMBED"]:
         try:
             return AzureOpenAIEmbedding(deployment=model)
         except Exception as exc:
             logger.error(f"Error in resolving Azure embed client for model: {model}")
             raise HTTPException(status_code=400, detail=f"Error in resolving Azure embed client for model: {model}, {str(exc)}")
-    if f"{model}:latest" in OllamaEmbedding.list_models():
+    if f"{model}:latest" in OLLAMA_MODELS["EMBED"]:
         try:
             return OllamaEmbedding(model=f"{model}:latest")
         except Exception as exc:
             logger.error(f"Error in resolving Ollama embed client for model: {model}")
             raise HTTPException(status_code=400, detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}")
-    if model in OllamaEmbedding.list_models():
+    if model in OLLAMA_MODELS["EMBED"]:
         try:
             return OllamaEmbedding(model=model)
         except Exception as exc:
