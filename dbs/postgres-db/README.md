@@ -15,3 +15,13 @@ to your configuration.
 helm dependency update
 helm install ${RELEASE} . -n ${NAMESPACE}
 ```
+
+## Admin
+
+docker pull dpage/pgadmin4
+
+docker run -p 30980:80 \
+    -e 'PGADMIN_DEFAULT_EMAIL=${ADMIN_EMAIL}' \
+    -e 'PGADMIN_DEFAULT_PASSWORD=${ADMIN_PASSWORD}' \
+    -d dpage/pgadmin4 
+
