@@ -1,7 +1,6 @@
-import psycopg
+
 from dotenv import load_dotenv
 import os
-import pytest
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,19 +16,6 @@ host = os.getenv("POSTGRES_HOST")
 port = os.getenv("POSTGRES_PORT")
 
 logger.info(f"Connecting to database {dbname} on {host}:{port} as user {user}")
-
-@pytest.fixture(scope="module")
-def db_connection():
-    # Connect to your PostgreSQL database
-    conn = psycopg.connect(
-        dbname=dbname,
-        user=user,
-        password=password,
-        host=host,
-        port=port
-    )
-    yield conn
-    conn.close()
 
 def test_table_existence(db_connection):
     # Create a cursor object
