@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from polus.aithena.common.logger import get_logger
 from polus.aithena.common.utils import init_dir
-from polus.aithena.jobs.getopenalex.config import FROM_DATE, FROM_TODAY, OUTPUT_PATH
+from polus.aithena.jobs.getopenalex.config import FROM_DATE, ALL_LAST_MONTH, OUTPUT_PATH
 from polus.aithena.jobs.getopenalex.s3_types import SnapshotS3
 
 app = typer.Typer()
@@ -40,8 +40,9 @@ def main(
     """Get OpenAlex from S3 Bucket."""
     logger = get_logger(__file__)
     logger.info(f"outDir = {out_dir}")
-    if FROM_TODAY:
-        from_date = date.today().isoformat()
+    if ALL_LAST_MONTH:
+        today_ = date.today()
+        from_date = today_.replace(day=1, month=today_.month-1).isoformat()
     logger.info(f"fromDate = {from_date}")
     if only_type is not None:
         only_type = only_type.lower()
