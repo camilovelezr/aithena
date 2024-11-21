@@ -1,4 +1,3 @@
-
 from dotenv import load_dotenv
 import os
 from polus.aithena.common.logger import get_logger
@@ -9,7 +8,7 @@ logger = get_logger(__name__)
 load_dotenv()
 
 # Get database connection parameters from environment variables
-dbname = os.getenv("POSTGRES_DB")
+dbname = os.getenv("POSTGRES_DB")   
 user = os.getenv("POSTGRES_USER")
 password = os.getenv("POSTGRES_PASSWORD")
 host = os.getenv("POSTGRES_HOST")

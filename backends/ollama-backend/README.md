@@ -11,18 +11,18 @@ Update values according to your deployment.
 
 ### Install with Helm
 
-mh install ollama helm  -n ${NAMESPACE}
+```mh install ollama helm  -n ${NAMESPACE}```
 
 ## Configure
 
 check it runs :
 
-curl ${HOST}:${NODE_PORT}
+```curl ${HOST}:${NODE_PORT}```
 
 
 Check available models: 
 
-curl ${HOST}:${NODE_PORT}/api/tags
+```curl ${HOST}:${NODE_PORT}/api/tags```
 
 
 ### Download models
@@ -51,3 +51,10 @@ curl ${HOST}:${NODE_PORT}/api/embeddings -d '{
   "model": "nomic-embed-text",
   "prompt": "This is a test embedding"
 }'
+
+===========
+
+## Benchmarks
+
+```mh upgrade ollama-multi .  -f values-scaling.yaml -n ollama```
+
