@@ -1,0 +1,45 @@
+replicaCount: 1
+
+schedule: "0 9 1 * *" # 9AM UTC on the first day of the month
+ttlSecondsAfterFinished: 86400 # Keep the pod for debugging for 1 day
+backoffLimit: 4
+
+image:
+  repository: camilovelezr/get-openalex
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+container:
+  restartPolicy: "OnFailure"
+
+volumeMounts:
+  - name: data-volume
+    mountPath: "/mnt/outdir" # must match env.OUT_DIR.value
+
+volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: get-openalex-job-pvc
+
+env:
+  - name: ALL_LAST_MONTH
+    value: 1
+  - name: OUT_DIR
+    value: "/mnt/outdir" # must match volumeMounts.mountPath
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "1"
+
+persistentVolume:
+  enabled: true # Flag to enable/disable PV and PVC creation
+  storage: 500Gi
+  hostPath: /path/to/openalex-data
+
+persistentVolumeClaim:
+  enabled: true # Flag to enable/disable PVC usage
+  storageClassName: "" # Use the default storage class if left empty
+  accessModes:
+    - ReadWrite
+  storage: 500Gi
