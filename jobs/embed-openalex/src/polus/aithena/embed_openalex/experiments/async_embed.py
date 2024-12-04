@@ -1,13 +1,13 @@
+"""DEPRECATED. First version of the async embedding script for OpenAlex works."""
+
 from pathlib import Path
 from dotenv import load_dotenv
 import os
 import httpx
-from polus.aithena.common.utils import async_time_logger, time_logger
-import psycopg
+from polus.aithena.common.utils import async_time_logger
 from polus.aithena.common.logger import get_logger
 from openalex_types.works import Work, _construct_abstract_from_index
 import psycopg_pool
-import requests
 import asyncio
 from tqdm.asyncio import tqdm
 
@@ -87,11 +87,12 @@ async def embed(texts: list[str]) -> list[float]:
     Args:
         texts: List of texts to embed.
     """
+    logger.debug(f"Embedding {len(texts)} texts...")
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(EMBED_URL, headers=DEFAULT_HEADERS, json=texts, timeout=120.0)
+            response = await client.post(EMBED_URL, headers=DEFAULT_HEADERS, json=texts, timeout=None)
             response.raise_for_status()
-            # logger.debug(f"Got response {response.json()}")
+            logger.debug(f"embeddings completed {response.json()}")
             return response.json()
     except httpx.RequestError as exc:
         logger.error(f"An error occurred while requesting {exc.request.url!r}.")
@@ -102,7 +103,6 @@ async def embed(texts: list[str]) -> list[float]:
     except httpx.ReadTimeout as exc:
         logger.error(f"Read timeout occurred while requesting {exc.request.url!r}.")
         raise ValueError(f"Failed to get embedding: Read timeout") from exc
-
 
 def get_abstracts(works : list[Work]) -> list[str]:
     """Get abstracts from works.
@@ -214,9 +214,8 @@ async def embed_pipeline(
     """
     try:
         pool = await get_async_pool(db_max_connections)
-        logger.debug("Got async pool")
         await pool.open()
-        logger.debug("Pool ready")
+        logger.debug("Got async pool")
         
         embed_count = 0
         processed_count = 0

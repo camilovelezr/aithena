@@ -8,6 +8,9 @@ image:
   pullPolicy: IfNotPresent
   tag: "0.1.0-dev3"
 
+container:
+  command: ["serve"]
+
 service:
   type: NodePort
   port: 8765
