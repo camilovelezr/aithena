@@ -1,6 +1,6 @@
 replicaCount: 1
 
-schedule: "0 9 2 * *" # 9AM UTC on the first day of the month
+schedule: "0 9 1 * *" # 9AM UTC on the first day of the month
 ttlSecondsAfterFinished: 86400 # Keep the pod for debugging for 1 day
 backoffLimit: 4
 
