@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "pgvector-db"
+version = "0.1.0"
+description = "pgvector-db"
+authors = ["Camilo Velez <camilo.velez@axleinfo.com>"]
+readme = "README.md"
+packages = [{include = "aithena",from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^3.8.0"
+bump2version = "^1.0.1"
+pytest = "^8.3.2"
+pytest-sugar = "^1.0.0"
+pytest-xdist = "^3.6.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = [
+"."
+]
+
+[tool.poetry.scripts]
+pgvector-db = "aithena.dbs.pgvector.__main__:main"
+    
