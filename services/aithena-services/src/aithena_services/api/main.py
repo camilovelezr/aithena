@@ -1,29 +1,31 @@
 # mypy: disable-error-code="import-untyped"
 """Aithena-Services FastAPI REST Endpoints. """
 
-# pylint: disable=W1203, C0412, C0103, W0212
+# pylint: disable=W1203, C0412, C0103, W0212, W0707
 
 import json
 from typing import Optional
 
 import httpx
 import requests
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
-
+from aithena_services.config import OLLAMA_HOST, TIMEOUT, time_logger
 from aithena_services.embeddings.azure_openai import AzureOpenAIEmbedding
 from aithena_services.embeddings.ollama import OllamaEmbedding
-from aithena_services.config import OLLAMA_HOST, TIMEOUT
 from aithena_services.llms.azure_openai import AzureOpenAI
 from aithena_services.llms.ollama import Ollama
+from aithena_services.memory.pgvector import similarity_search as pgvsimilarity
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger("aithena_services.api")
 
 
 app = FastAPI()
-OLLAMA_MODELS = {"EMBED": OllamaEmbedding.list_models(), "CHAT": Ollama.list_models()}
-AZURE_MODELS = {"EMBED": AzureOpenAIEmbedding.list_models(), "CHAT": AzureOpenAI.list_models()}
+OLLAMA_MODELS = {"EMBED": OllamaEmbedding.list_models(),
+                 "CHAT": Ollama.list_models()}
+AZURE_MODELS = {"EMBED": AzureOpenAIEmbedding.list_models(),
+                "CHAT": AzureOpenAI.list_models()}
 
 
 def check_platform(platform: str):
@@ -43,6 +45,7 @@ def test():
     logger.debug("Testing FastAPI deployment")
     return {"status": "success"}
 
+
 @app.put("/update")
 def update_model_lists():
     """Update chat/embed model lists."""
@@ -59,6 +62,7 @@ def update_model_lists():
         logger.error(f"Error in updating model lists: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
     return {"status": "success"}
+
 
 @app.get("/chat/list")
 def list_chat_models():
@@ -85,14 +89,16 @@ def list_chat_models_by_platform(platform: str):
             return r
         except Exception as exc:
             logger.error(f"Error in listing chat models in Azure: {exc}")
-            raise HTTPException(status_code=400, detail=f"There was a problem listing chat models in Azure: {str(exc)}")
+            raise HTTPException(
+                status_code=400, detail=f"There was a problem listing chat models in Azure: {str(exc)}")
     try:
-        r =  Ollama.list_models()
+        r = Ollama.list_models()
         OLLAMA_MODELS["CHAT"] = r
         return r
     except Exception as exc:
         logger.error(f"Error in listing chat models in Ollama: {exc}")
-        raise HTTPException(status_code=400, detail=f"There was a problem listing chat models in Ollama: {str(exc)}")
+        raise HTTPException(
+            status_code=400, detail=f"There was a problem listing chat models in Ollama: {str(exc)}")
 
 
 @app.get("/embed/list")
@@ -111,17 +117,20 @@ def list_embed_models_by_platform(platform: str):
     check_platform(platform)
     if platform == "azure":
         try:
-            r =  AzureOpenAIEmbedding.list_models()
+            r = AzureOpenAIEmbedding.list_models()
             AZURE_MODELS["EMBED"] = r
             return r
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"There was a problem listing embed models in Azure: {str(exc)}")
+            raise HTTPException(
+                status_code=400, detail=f"There was a problem listing embed models in Azure: {str(exc)}")
     try:
         r = OllamaEmbedding.list_models()
         OLLAMA_MODELS["EMBED"] = r
         return r
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"There was a problem listing embed models in Ollama: {str(exc)}")
+        raise HTTPException(
+            status_code=400, detail=f"There was a problem listing embed models in Ollama: {str(exc)}")
+
 
 def resolve_client_chat(model: str, num_ctx: Optional[int]):
     """Resolve client for chat models."""
@@ -130,7 +139,8 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
             return AzureOpenAI(deployment=model)
         except Exception as exc:
             logger.error(f"Error in resolving Azure client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Azure chat client for model: {model}, {str(exc)}") 
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Azure chat client for model: {model}, {str(exc)}")
     if f"{model}:latest" in OLLAMA_MODELS["CHAT"]:
         return resolve_client_chat(f"{model}:latest", num_ctx)
     if model in OLLAMA_MODELS["CHAT"]:
@@ -138,13 +148,17 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
             if num_ctx:
                 return Ollama(model=model, context_window=num_ctx, request_timeout=500)
         except Exception as exc:
-            logger.error(f"Error in resolving Ollama client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}")
+            logger.error(
+                f"Error in resolving Ollama client for model: {model}")
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}")
         try:
             return Ollama(model=model)
         except Exception as exc:
-            logger.error(f"Error in resolving Ollama client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}")
+            logger.error(
+                f"Error in resolving Ollama client for model: {model}")
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}")
     logger.error(f"Chat model not found: {model}")
     raise HTTPException(status_code=404, detail="Chat model not found.")
 
@@ -155,20 +169,26 @@ def resolve_client_embed(model: str):
         try:
             return AzureOpenAIEmbedding(deployment=model)
         except Exception as exc:
-            logger.error(f"Error in resolving Azure embed client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Azure embed client for model: {model}, {str(exc)}")
+            logger.error(
+                f"Error in resolving Azure embed client for model: {model}")
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Azure embed client for model: {model}, {str(exc)}")
     if f"{model}:latest" in OLLAMA_MODELS["EMBED"]:
         try:
             return OllamaEmbedding(model=f"{model}:latest")
         except Exception as exc:
-            logger.error(f"Error in resolving Ollama embed client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}")
+            logger.error(
+                f"Error in resolving Ollama embed client for model: {model}")
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}")
     if model in OLLAMA_MODELS["EMBED"]:
         try:
             return OllamaEmbedding(model=model)
         except Exception as exc:
-            logger.error(f"Error in resolving Ollama embed client for model: {model}")
-            raise HTTPException(status_code=400, detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}")
+            logger.error(
+                f"Error in resolving Ollama embed client for model: {model}")
+            raise HTTPException(
+                status_code=400, detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}")
     logger.error(f"Embed model not found: {model}")
     raise HTTPException(status_code=404, detail="Embed model not found.")
 
@@ -214,10 +234,12 @@ async def generate_from_msgs(
         return res.as_json()
     except httpx.ReadTimeout as exc:
         logger.error(f"Timeout error in chat response")
-        raise HTTPException(status_code=408, detail="Timeout error in chat response")
+        raise HTTPException(
+            status_code=408, detail="Timeout error in chat response")
     except Exception as exc:
         logger.error(f"Error in chat generation: {str(exc)}")
         raise HTTPException(status_code=400, detail=str(exc))
+
 
 @app.post("/embed/{model}/generate")
 async def text_embeddings(
@@ -234,7 +256,8 @@ async def text_embeddings(
             res = await client._aget_text_embeddings(text)
     except httpx.ReadTimeout as exc:
         logger.error(f"Timeout error in embedding generation")
-        raise HTTPException(status_code=408, detail="Timeout error in embedding generation")
+        raise HTTPException(
+            status_code=408, detail="Timeout error in embedding generation")
     except Exception as exc:
         logger.error(f"Error in text embeddings: {str(exc)}")
         raise HTTPException(status_code=400, detail=str(exc))
@@ -272,7 +295,8 @@ async def ollama_ps():
         res = httpx.get(f"{OLLAMA_HOST}/api/ps", timeout=TIMEOUT).json()
     except httpx.ReadTimeout as exc:
         logger.error(f"Timeout error in Ollama ps")
-        raise HTTPException(status_code=408, detail="Timeout error in Ollama ps")
+        raise HTTPException(
+            status_code=408, detail="Timeout error in Ollama ps")
     except Exception as exc:
         logger.error(f"Error in Ollama ps: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
@@ -284,9 +308,45 @@ async def ollama_delete(model: str):
     """Delete Ollama model."""
     logger.debug(f"Deleting Ollama model: {model}")
     try:
-        res = requests.delete(f"{OLLAMA_HOST}/api/delete", json={"name": model}, timeout=TIMEOUT)
+        res = requests.delete(f"{OLLAMA_HOST}/api/delete",
+                              json={"name": model}, timeout=TIMEOUT)
         res.raise_for_status()
     except Exception as exc:
         logger.error(f"Error in deleting Ollama model: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
     return {"status": "success"}
+
+
+@time_logger
+@app.post("/memory/pgvector/search")
+def search_pgvector(
+    table_name: str,
+    vector: list[float],
+    n: int = 10,
+    full: bool = False,
+):
+    """
+    Search for similar vectors in a specified table using pgvector with cosine distance.
+
+    Args:
+        table_name (str): The name of the table to search in.
+        vector (list[float]): The vector to search for similar vectors.
+        n (int, optional): The number of similar vectors to return. Defaults to 10.
+
+        full (bool, optional):
+            Whether to return full Work object. If `False`, only
+            the metadata in `openales.works` table will be returned. When `True`, the
+            query is significantly slower.
+
+    Returns:
+        The result of the similarity search.
+
+    Raises:
+        HTTPException: If there is an error during the similarity search.
+    """
+    try:
+        res = pgvsimilarity(table_name, vector, n, full)
+    except Exception as exc:
+        logger.error(f"Error in similarity search: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return res
