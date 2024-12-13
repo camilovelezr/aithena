@@ -1,4 +1,5 @@
 #!/bin/bash
+# Kill a process and all its children.
 
 # Check if the parent PID is provided
 if [ -z "$1" ]; then
