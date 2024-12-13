@@ -21,7 +21,7 @@ POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 DB_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "64"))
 DB_FORCE_UPDATE = os.getenv("DB_FORCE_UPDATE", "True").lower() == "true"
-
+DB_CONN_TIMEOUT = 300
 CONN_INFO = (
     f"host={POSTGRES_HOST} "
     + f"port={POSTGRES_PORT} "
@@ -37,13 +37,16 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
  # if OLLAMA_HOST, this should be the nodeport
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "32437"))
 # OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
+OLLAMA_HTTP_TIMEOUT = 30
+DEFAULT_HEADERS = { "Content-Type": "application/json"}
+SEARCH_DOC_PREFIX="search_document:"
 # TODO CHECK should be the same as ollama queue
 EMBED_MAX_CONCURRENT_REQUESTS = int(os.getenv("EMBED_MAX_CONCURRENT_REQUESTS", "200"))
 EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "100"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 EMBEDDING_SIZE = os.getenv("EMBEDDING_SIZE","768")
 # name of the table where embeddings are stored
-# EMBEDDING_TABLE = f"embedding_{EMBEDDING_MODEL}_{EMBEDDING_SIZE}"
 EMBEDDING_TABLE = f"{EMBEDDING_MODEL.replace('-','_')}_{EMBEDDING_SIZE}"
 AVG_TEXT_TOKENS_COUNT = int(512) # Longer texts will be truncated for embedding
 CONTEXT_WINDOW_SIZE = AVG_TEXT_TOKENS_COUNT * EMBED_BATCH_SIZE
+EMBEDDING_OPTIONS = {"num_ctx": CONTEXT_WINDOW_SIZE}

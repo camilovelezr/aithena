@@ -53,7 +53,7 @@ async def get_async_pool(db_max_connections: int) -> psycopg_pool.ConnectionPool
         max_size=db_max_connections,
     )
 
-async def async_query(pool: psycopg_pool.ConnectionPool, query: str):
+async def async_query(query: str, pool: psycopg_pool.ConnectionPool):
     """Execute a query asynchronously and return the results."""
     logger.debug("Attempt to create connection")
     async with pool.connection() as conn:
@@ -188,7 +188,7 @@ async def get_work_count(pool):
         SELECT COUNT(*)
         FROM {schema_name}.{table_name}
     """
-    res = await async_query(pool, count_works_query)
+    res = await async_query(count_works_query, pool)
     total_work_count = res[0][0]
     logger.debug(f"Total amount of works: {total_work_count}")
     return total_work_count
@@ -234,7 +234,7 @@ async def embed_pipeline(
             # Process current set of batches.
             for batch_index in range(0, total_concurrent_batch_size, batch_size):
                 batch_works_query = f"{works_query} OFFSET {offset}"
-                tasks.append(async_query(pool, batch_works_query))
+                tasks.append(async_query(batch_works_query, pool))
                 offset += batch_size
                 logger.debug(f"Added task {global_batch_index * total_concurrent_batch_size + batch_index} for offset {offset}")
 

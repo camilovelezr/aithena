@@ -1,7 +1,6 @@
 """Pipeline module to manage a sequence of asynchronous tasks."""
 
 import asyncio
-import random
 from typing import Any, Callable, Dict, Iterable
 from polus.aithena.common.logger import get_logger
 
@@ -12,6 +11,12 @@ class Step():
     
     Each step is a processing unit that can be connected to other steps.
     Each step has an input queue and an output queue and executes a processing function on the input data.
+
+    Args:
+        id (int): Step identifier.
+        workers (int): Maximum number of tasks to run in parallel.
+        queue_size (int): Maximum size of the input queue.
+        process (Callable): Processing function to apply to the input data.
     """
     id: int
     workers: list[asyncio.Task]
@@ -27,17 +32,19 @@ class Step():
         self.process = process
 
     def next(self, next_step : 'Step'):
+        """Connect the output of this step to the input of the next step."""
         self.queue_out = next_step.queue_in
 
     async def run(self, kwargs):
+        """Run the step."""
         while True:
             data = await self.queue_in.get()
             try:
-                print(f"Step {self.id}, queue size: {self.queue_in.qsize()}. Processing data {data[0]}")
+                logger.debug(f"Step {self.id}, queue size: {self.queue_in.qsize()}. Processing data {data[0]}")
                 res = await self.process(data, kwargs)
                 if(self.queue_out is not None):
                     await self.queue_out.put(res)
-                print(f'Step {self.id} finished "{data[0]}"')
+                logger.debug(f'Step {self.id} completed for data : "{data[0]}"')
             except Exception as e:
                 logger.error(f'Step {self.id} Data: [{data[0]}]. Exception: {e}')
             finally:
@@ -51,12 +58,11 @@ class Pipeline(Step):
     
     Args:
         steps (list[Step]): List of steps to run.
-            The first step inputs are the pipeline inputs.
-            The last step outputs are the pipeline outputs.
+            The first step input is the pipeline inputs.
+            The last step output is the pipeline outputs.
         kwargs (dict): Arguments to pass to each processing step.
-        on_result (Callable): Callback function to call when a result is produced.
+        on_result (Callable): Callback function to call when a pipeline output is produced.
     """
-
     steps: list[Step]
 
     def __init__(self, steps: list[Step], kwargs, on_result: Callable) -> None:
@@ -66,8 +72,14 @@ class Pipeline(Step):
 
         Args: 
             steps (list[Step]): List of steps to run.
-            kwargs (dict): Arguments to pass to each processing step.
+            kwargs (dict): pipeline configuration to pass to each processing step.
             on_result (Callable): Callback function to call when a result is produced.
+
+        Attributes:
+            workers (list[list[asyncio.Task]]): available tasks for each step.
+            queue_in (asyncio.Queue): input queue of the pipeline.
+            queue_out (asyncio.Queue): output queue of the pipeline.
+            final_output_task (asyncio.Task): task to process the output of the pipeline.
         """
         self.steps = steps
         self.workers = [[asyncio.create_task(step.run(kwargs)) for _ in range(step.workers)] for step in steps]
@@ -77,12 +89,16 @@ class Pipeline(Step):
         self.on_result = on_result
         self.final_output_task = asyncio.create_task(self.process_output(kwargs))
 
-    async def start(self, data: Iterable):
-        """Start the pipeline on the data."""
-        # Produce all items for step1
-        for start in data:
-            end = min(data.stop, start + data.step)
-            await self.queue_in.put((start,end))
+    async def start(self, data, all: bool = False):
+        """Start the pipeline on the data.
+        
+        Each item in the data is put in the input queue of the first step.
+        Data can be a list of items or an iterable of items.
+        """
+        if isinstance(data, Iterable):
+            for start in data:
+                end = min(data.stop, start + data.step)
+                await self.queue_in.put((start,end))
 
     async def run_until_completed(self):
         """Run the pipeline until all steps are completed."""

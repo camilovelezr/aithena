@@ -1,1 +1,3 @@
-embed_count.txt
+*.txt
+*.log
+*.out
