@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "aithena_services", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.11,<3.12"
 pydantic = "^2.7.4"
 openai = "^1.35.13"
 requests = "^2.32.3"
@@ -25,6 +25,8 @@ llama-index-llms-azure-openai = "^0.2.0"
 typing-extensions = "^4.12.2"
 uvicorn = "^0.30.6"
 httpx = "^0.27.2"
+psycopg = {extras = ["binary"], version = "^3.2.3"}
+openalex-types = {git="https://github.com/camilovelezr/openalex-types.git"}
 
 
 [tool.poetry.group.dev.dependencies]
