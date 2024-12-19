@@ -24,13 +24,13 @@ async def run_query(
     logger.info(res)
 
 if __name__ == "__main__":
-   # query = f"SELECT id FROM openalex.works LIMIT 10;"
+   query = f"SELECT id FROM openalex.works LIMIT 10;"
 
-    query = f"""
-    CREATE INDEX 
-    ON openalex.nomic_embed_text_768 
-    USING hnsw (embedding vector_cosine_ops) 
-    WITH (m = 48, ef_construction = 100);
-    """
+    # query = f"""
+    # CREATE INDEX 
+    # ON openalex.nomic_embed_text_768 
+    # USING hnsw (embedding vector_cosine_ops) 
+    # WITH (m = 48, ef_construction = 100);
+    # """
 
     asyncio.run(run_query(query))

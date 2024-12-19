@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aithena-services"
-version = "0.1.1-dev0"
+version = "0.1.1-dev3"
 description = ""
 authors = ["Camilo Velez <camilo.velez@axleinfo.com>, Antoine Gerardin <antoine.gerardin@nextonicsolutions.com>"]
 readme = "README.md"
@@ -32,6 +32,10 @@ openalex-types = {git="https://github.com/camilovelezr/openalex-types.git"}
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
 pytest-asyncio = "^0.23.8"
+
+
+[tool.poetry.group.test.dependencies]
+bump2version = "^1.0.1"
 
 [build-system]
 requires = ["poetry-core"]

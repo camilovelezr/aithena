@@ -14,6 +14,16 @@ RUN mkdir aithena
 COPY $TOOL_DIR ${EXEC_DIR}/aithena/${TOOL_DIR}
 COPY common ${EXEC_DIR}/aithena/common
 
+# Set environment variables to avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Git and any other dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install the tool
 RUN pip3 install "${EXEC_DIR}/aithena/${TOOL_DIR}"
 
