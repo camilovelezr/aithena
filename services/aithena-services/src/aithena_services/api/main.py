@@ -13,7 +13,8 @@ from aithena_services.embeddings.azure_openai import AzureOpenAIEmbedding
 from aithena_services.embeddings.ollama import OllamaEmbedding
 from aithena_services.llms.azure_openai import AzureOpenAI
 from aithena_services.llms.ollama import Ollama
-from aithena_services.memory.pgvector import similarity_search as pgvsimilarity
+from aithena_services.memory.pgvector import similarity_search, works_by_similarity_search
+from aithena_services.memory.pgvector import work_ids_by_similarity_search
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from polus.aithena.common.logger import get_logger
@@ -45,6 +46,22 @@ def test():
     logger.debug("Testing FastAPI deployment")
     return {"status": "success"}
 
+@app.put("/update")
+def update_model_lists():
+    """Update chat/embed model lists."""
+    try:
+        az = AzureOpenAI.list_models()
+        ol = Ollama.list_models()
+        OLLAMA_MODELS["CHAT"] = ol
+        AZURE_MODELS["CHAT"] = az
+        az = AzureOpenAIEmbedding.list_models()
+        ol = OllamaEmbedding.list_models()
+        OLLAMA_MODELS["EMBED"] = ol
+        AZURE_MODELS["EMBED"] = az
+    except Exception as exc:
+        logger.error(f"Error in updating model lists: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"status": "success"}
 
 @app.put("/update")
 def update_model_lists():
@@ -344,11 +361,38 @@ def search_pgvector(
         HTTPException: If there is an error during the similarity search.
     """
     try:
-        res = pgvsimilarity(table_name, vector, n)
+        res = similarity_search(table_name, vector, n)
     except Exception as exc:
         logger.error(f"Error in similarity search: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
     return res
 
 
-# TODO: add endpoint where we abstract away the schema
+@time_logger
+@app.post("/memory/pgvector/search_work_ids")
+def search_work_ids_pgvector(
+    table_name: str,
+    vector: list[float],
+    n: int = 10,
+):
+    try:
+        res = work_ids_by_similarity_search(table_name, vector, n)
+    except Exception as exc:
+        logger.error(f"Error in similarity search: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return res
+
+
+@time_logger
+@app.post("/memory/pgvector/search_works")
+def search_works_pgvector(
+    table_name: str,
+    vector: list[float],
+    n: int = 10,
+):
+    try:
+        res = works_by_similarity_search(table_name, vector, n)
+    except Exception as exc:
+        logger.error(f"Error in similarity search: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return res
