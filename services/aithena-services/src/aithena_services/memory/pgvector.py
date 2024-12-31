@@ -175,8 +175,6 @@ def similarity_search(
                 cur.execute(query)
                 res = cur.fetchall()
 
-                logger.debug(f"!!!!!!!!!!!! res {res}")
-
                 if full:
                     works = [Work(**w) for w in res[0][0]]
                 else:

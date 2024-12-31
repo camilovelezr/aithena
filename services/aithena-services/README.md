@@ -1,4 +1,4 @@
-# aithena-services 0.1.1-dev3
+# aithena-services 0.1.1-dev4
 
 Aithena-services provides a unified way to interact with many LLMs.
 
@@ -37,7 +37,7 @@ DOCKER_NETWORK=aithena-net
 OLLAMA_PORT=11434
 OLLAMA_CONTAINER_NAME=ollama
 AITHENA_SERVICES_PORT=9000
-AITHENA_SERVICES_IMAGE=polusai/aithena-services:0.1.0-dev3
+AITHENA_SERVICES_IMAGE=polusai/aithena-services:0.1.1-dev4
 ```
 
 ```shell

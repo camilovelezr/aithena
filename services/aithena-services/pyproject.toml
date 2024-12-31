@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aithena-services"
-version = "0.1.1-dev3"
+version = "0.1.1-dev4"
 description = ""
 authors = ["Camilo Velez <camilo.velez@axleinfo.com>, Antoine Gerardin <antoine.gerardin@nextonicsolutions.com>"]
 readme = "README.md"
@@ -26,7 +26,7 @@ typing-extensions = "^4.12.2"
 uvicorn = "^0.30.6"
 httpx = "^0.27.2"
 psycopg = {extras = ["binary"], version = "^3.2.3"}
-openalex-types = {git="https://github.com/camilovelezr/openalex-types.git"}
+openalex-types = {git="https://github.com/camilovelezr/openalex-types.git", develop=true}
 
 
 [tool.poetry.group.dev.dependencies]
