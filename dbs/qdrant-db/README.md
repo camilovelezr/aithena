@@ -26,6 +26,7 @@ iii/ deploy the ingestion pipeline that will populate the database with new reco
 
 ### Case 1 - Copy an existing collection
 
+
 (If qdrant has been run as priviledged user, you will
 need to sudo)
 
