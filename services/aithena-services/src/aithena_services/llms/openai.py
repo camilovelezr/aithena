@@ -1,12 +1,10 @@
 # mypy: disable-error-code="import-untyped"
 """OpenAI Implementation based on LlamaIndex."""
 
-# pylint: disable=too-many-ancestors
+# pylint: disable=too-many-ancestors, W1203
 from typing import Any, Sequence
 
-from llama_index.llms.openai import OpenAI as LlamaIndexOpenAI  # type: ignore
-from openai import OpenAI as OpenAIClient
-
+from aithena_services.config import OPENAI_KEY, TIMEOUT
 from aithena_services.llms.types import Message
 from aithena_services.llms.types.base import AithenaLLM, chataithena, streamchataithena
 from aithena_services.llms.types.response import (
@@ -15,18 +13,24 @@ from aithena_services.llms.types.response import (
     ChatResponseGen,
 )
 from aithena_services.llms.utils import check_and_cast_messages
+from llama_index.llms.openai import OpenAI as LlamaIndexOpenAI  # type: ignore
+from openai import OpenAI as OpenAIClient
 from polus.aithena.common.logger import get_logger
-from aithena_services.config import TIMEOUT
 
 logger = get_logger("aithena_services.llms.openai")
+
 
 def custom_sort_for_openai_models(name: str) -> tuple[int, str]:
     """Custom sort function for OpenAI models."""
     return int(name.split("-")[1].split(".")[0][0]), name  # gpt-3.5 -> (3, "gpt-3.5")
 
 
-def list_openai_models() -> list[str]:
+def list_openai_models() -> list:
     """List available OpenAI models."""
+    if OPENAI_KEY is None:
+        logger.debug(
+            "OPENAI_KEY not set. listing OpenAI models, returning empty list.")
+        return []
     return sorted(
         [
             x.id
@@ -46,7 +50,8 @@ class OpenAI(LlamaIndexOpenAI, AithenaLLM):
 
     def __init__(self, timeout=TIMEOUT, **kwargs: Any):
         if "model" not in kwargs:
-            raise ValueError(f"Model not specified. Available models: {OPENAI_MODELS}")
+            raise ValueError(
+                f"Model not specified. Available models: {OPENAI_MODELS}")
         if kwargs["model"] not in OPENAI_MODELS:
             raise ValueError(
                 f"Model {kwargs['model']} not available. Available models: {OPENAI_MODELS}"
@@ -55,7 +60,7 @@ class OpenAI(LlamaIndexOpenAI, AithenaLLM):
         super().__init__(timeout=timeout, **kwargs)
 
     @staticmethod
-    def list_models() -> list[str]:
+    def list_models() -> list:
         """List available OpenAI chat models."""
         logger.debug(f"Listing OpenAI chat models")
         return list_openai_models()
