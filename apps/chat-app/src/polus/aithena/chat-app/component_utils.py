@@ -21,8 +21,8 @@ def SelectOptions(
     set_reset_value,
     messages,
     set_edit_mode_value,
-    context_window,
-    set_context
+    # context_window,
+    # set_context
 ):
     with solara.Row(
         style={
@@ -50,11 +50,11 @@ def SelectOptions(
                 messages,
             ),
         )
-        solara.InputInt(
-            label="Context Window",
-            value=context_window,
-            on_value=set_context,
-        )
+        # solara.InputInt(
+        #     label="Context Window",
+        #     value=context_window,
+        #     on_value=set_context,
+        # )
 
 
 def save_edited_msg(index, edit_index, current_edit_val, messages):

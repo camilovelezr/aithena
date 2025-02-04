@@ -13,11 +13,8 @@ from aithena_services.embeddings.azure_openai import AzureOpenAIEmbedding
 from aithena_services.embeddings.ollama import OllamaEmbedding
 from aithena_services.llms.azure_openai import AzureOpenAI
 from aithena_services.llms.ollama import Ollama
-from aithena_services.memory.pgvector import (
-    similarity_search,
-    work_ids_by_similarity_search,
-    works_by_similarity_search,
-)
+from aithena_services.llms.openai import OpenAI
+from aithena_services.memory.pgvector import similarity_search
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from polus.aithena.common.logger import get_logger
@@ -32,15 +29,16 @@ AZURE_MODELS = {
     "EMBED": AzureOpenAIEmbedding.list_models(),
     "CHAT": AzureOpenAI.list_models(),
 }
+OPENAI_MODELS = {"EMBED": [], "CHAT": OpenAI.list_models()}
 
 
 def check_platform(platform: str):
     """Check if the platform is valid."""
-    if platform not in ["ollama", "azure"]:
+    if platform not in ["ollama", "azure", "openai"]:
         logger.error(f"Invalid platform: {platform}")
         raise HTTPException(
             status_code=404,
-            detail="Invalid platform, must be 'ollama' or 'azure'",
+            detail="Invalid platform, must be 'ollama', 'azure', or 'openai'.",
         )
 
 
@@ -52,15 +50,17 @@ def test():
 
 
 @app.put("/update")
-def update_model_lists():
+async def update_model_lists():
     """Update chat/embed model lists."""
     try:
-        az = AzureOpenAI.list_models()
-        ol = Ollama.list_models()
+        az = await AzureOpenAI.list_models()
+        ol = await Ollama.list_models()
+        oai = await OpenAI.list_models()
         OLLAMA_MODELS["CHAT"] = ol
         AZURE_MODELS["CHAT"] = az
-        az = AzureOpenAIEmbedding.list_models()
-        ol = OllamaEmbedding.list_models()
+        OPENAI_MODELS["CHAT"] = oai
+        az = await AzureOpenAIEmbedding.list_models()
+        ol = await OllamaEmbedding.list_models()
         OLLAMA_MODELS["EMBED"] = ol
         AZURE_MODELS["EMBED"] = az
     except Exception as exc:
@@ -75,12 +75,14 @@ def list_chat_models():
     try:
         az = AzureOpenAI.list_models()
         ol = Ollama.list_models()
+        oai = OpenAI.list_models()
         OLLAMA_MODELS["CHAT"] = ol
         AZURE_MODELS["CHAT"] = az
+        OPENAI_MODELS["CHAT"] = oai
     except Exception as exc:
         logger.error(f"Error in listing chat models: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
-    return [*az, *ol]
+    return [*az, *ol, *oai]
 
 
 @app.get("/chat/list/{platform}")
@@ -97,6 +99,17 @@ def list_chat_models_by_platform(platform: str):
             raise HTTPException(
                 status_code=400,
                 detail=f"There was a problem listing chat models in Azure: {str(exc)}",
+            )
+    if platform == "openai":
+        try:
+            r = OpenAI.list_models()
+            OPENAI_MODELS["CHAT"] = r
+            return r
+        except Exception as exc:
+            logger.error(f"Error in listing chat models in OpenAI: {exc}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"There was a problem listing chat models in OpenAI: {str(exc)}",
             )
     try:
         r = Ollama.list_models()
@@ -155,6 +168,16 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Azure chat client for model: {model}, {str(exc)}",
+            )
+    if model in OPENAI_MODELS["CHAT"]:
+        try:
+            return OpenAI(model=model)
+        except Exception as exc:
+            logger.error(
+                f"Error in resolving OpenAI client for model: {model}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error in resolving OpenAI chat client for model: {model}, {str(exc)}",
             )
     if f"{model}:latest" in OLLAMA_MODELS["CHAT"]:
         return resolve_client_chat(f"{model}:latest", num_ctx)
@@ -310,6 +333,8 @@ async def pull_ollama_model(model: str):
                 ) as response:
                     async for line in response.aiter_lines():
                         yield line + "\n"
+            # Call the update_model_lists function after streaming is done
+            await update_model_lists()
         except httpx.ReadTimeout as exc:
             logger.error(f"Timeout error in Ollama model pull: {exc}")
             yield json.dumps(
@@ -357,12 +382,11 @@ async def ollama_delete(model: str):
 
 
 @time_logger
-@app.post("/memory/pgvector/search")
+@app.post("/memory/search")
 def search_pgvector(
     table_name: str,
     vector: list[float],
     n: int = 10,
-    full: bool = False,
 ):
     """
     Search for similar vectors in a specified table using pgvector with cosine distance.
@@ -374,74 +398,13 @@ def search_pgvector(
 
 
     Returns:
-        The result of the similarity search as a list of Work objects.
+        The result of the similarity search as a list of id values.
 
     Raises:
         HTTPException: If there is an error during the similarity search.
     """
     try:
-        res = similarity_search(table_name, vector, n, full)
-    except Exception as exc:
-        logger.error(f"Error in similarity search: {exc}")
-        raise HTTPException(status_code=400, detail=str(exc))
-    return res
-
-
-@time_logger
-@app.post("/memory/pgvector/search_work_ids")
-def search_work_ids_pgvector(
-    table_name: str,
-    vector: list[float],
-    n: int = 10,
-):
-    """
-    Search for work IDs using pgvector similarity search.
-
-    This function performs a similarity search on
-    the specified table using the provided vector and returns the top `n` work IDs.
-
-    Args:
-        table_name (str): The name of the table to search in.
-        vector (list[float]): The vector to use for the similarity search.
-        n (int, optional): The number of top results to return. Defaults to 10.
-
-    Returns:
-        list: A list of work IDs that are most similar to the provided vector.
-
-    Raises:
-        HTTPException: If an error occurs during the similarity search.
-    """
-    try:
-        res = work_ids_by_similarity_search(table_name, vector, n)
-    except Exception as exc:
-        logger.error(f"Error in similarity search: {exc}")
-        raise HTTPException(status_code=400, detail=str(exc))
-    return res
-
-
-@time_logger
-@app.post("/memory/pgvector/search_works")
-def search_works_pgvector(
-    table_name: str,
-    vector: list[float],
-    n: int = 10,
-):
-    """
-    Perform a similarity search on the specified table using a vector.
-
-    Args:
-        table_name (str): The name of the table to search.
-        vector (list[float]): The vector to use for the similarity search.
-        n (int, optional): The number of results to return. Defaults to 10.
-
-    Returns:
-        list: The search results.
-
-    Raises:
-        HTTPException: If an error occurs during the similarity search.
-    """
-    try:
-        res = works_by_similarity_search(table_name, vector, n)
+        res = similarity_search(table_name, vector, n)
     except Exception as exc:
         logger.error(f"Error in similarity search: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))

@@ -2,12 +2,9 @@
 """Ollama implementation based on LlamaIndex."""
 
 # pylint: disable=too-many-ancestors, W1203
-import logging
 from typing import Any, Sequence
 
 import requests  # type: ignore
-from llama_index.llms.ollama import Ollama as LlamaIndexOllama  # type: ignore
-
 from aithena_services.config import OLLAMA_HOST, TIMEOUT
 from aithena_services.llms.types import Message
 from aithena_services.llms.types.base import AithenaLLM, chataithena, streamchataithena
@@ -17,7 +14,7 @@ from aithena_services.llms.types.response import (
     ChatResponseGen,
 )
 from aithena_services.llms.utils import check_and_cast_messages
-
+from llama_index.llms.ollama import Ollama as LlamaIndexOllama  # type: ignore
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger("aithena_services.llms.ollama")
@@ -58,8 +55,13 @@ class Ollama(LlamaIndexOllama, AithenaLLM):
         super().__init__(request_timeout=timeout, **kwargs)
 
     @staticmethod
-    def list_models(url: str = OLLAMA_HOST) -> list[str]:  # type: ignore
+    # type: ignore
+    def list_models(url: str | None = OLLAMA_HOST) -> list:
         """List available Ollama models."""
+        if url is None:
+            logger.debug(
+                "No Ollama url provided, listing llm models, returning empty list")
+            return []
         logger.debug(f"Listing Ollama chat models at {url}")
         r = [
             x["name"]
