@@ -133,11 +133,12 @@ DEFAULT_LLM = os.getenv("AITHENA_CHAT_DEFAULT_MODEL", "")
 if LLMS_AVAILABLE == []:
     raise ValueError("No LLMs available. Please check the LLM service.")
 elif DEFAULT_LLM in LLMS_AVAILABLE:
-    DEFAULT_LLM = DEFAULT_LLM 
+    DEFAULT_LLM = DEFAULT_LLM
 else:
     DEFAULT_LLM = LLMS_AVAILABLE[0]
 
-CONTEXT_WINDOW_SIZE = os.getenv("AITHENA_CHAT_CONTEXT_WINDOW_SIZE", "2048")
+# CONTEXT_WINDOW_SIZE = os.getenv("AITHENA_CHAT_CONTEXT_WINDOW_SIZE", "2048")
+
 
 @ solara.component
 def Page():
@@ -151,7 +152,7 @@ def Page():
 
     edit_mode, set_edit_mode = solara.use_state(False)
 
-    context_window, set_context = solara.use_state(int(CONTEXT_WINDOW_SIZE))
+    # context_window, set_context = solara.use_state(int(CONTEXT_WINDOW_SIZE))
 
     user_message_count = len(
         [m for m in MESSAGES.value if m["role"] == "user"])
@@ -164,14 +165,14 @@ def Page():
 
     current_edit_value = solara.reactive("")
 
-
     def call_llm():
         if user_message_count == 0:
             return
         logger.info(f"Calling LLM with {MESSAGES.value}")
         response = requests.post(
             get_chat_url(llm_name),
-            params={"stream": True, "num_ctx": context_window},
+            # params={"stream": True, "num_ctx": context_window},
+            params={"stream": True},
             json=MESSAGES.value,
             timeout=120,
             stream=True,
@@ -212,8 +213,8 @@ def Page():
             set_reset_on_change,
             MESSAGES.set,
             set_edit_mode,
-            context_window,
-            set_context,
+            # context_window,
+            # set_context,
         )
         with solara.lab.ChatBox():
             for index, item in enumerate(MESSAGES.value):

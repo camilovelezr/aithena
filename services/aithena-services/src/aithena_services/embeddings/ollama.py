@@ -1,16 +1,16 @@
 # mypy: disable-error-code="import-untyped"
-# pylint: disable=too-many-ancestors
+# pylint: disable=too-many-ancestors, W1203
 """Ollama Embeddings based on LlamaIndex."""
 
 from typing import Any
 
 import requests  # type: ignore
-from llama_index.embeddings.ollama import OllamaEmbedding as LlamaIndexOllama
-
 from aithena_services.config import OLLAMA_HOST
+from llama_index.embeddings.ollama import OllamaEmbedding as LlamaIndexOllama
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger("aithena_services.embeddings.ollama")
+
 
 class OllamaEmbedding(LlamaIndexOllama):
     """Ollama embeddings."""
@@ -26,8 +26,13 @@ class OllamaEmbedding(LlamaIndexOllama):
         super().__init__(**kwargs)
 
     @staticmethod
-    def list_models(url: str = OLLAMA_HOST) -> list[str]:  # type: ignore
+    # type: ignore
+    def list_models(url: str | None = OLLAMA_HOST) -> list:
         """List available Ollama models."""
+        if url is None:
+            logger.debug(
+                "No Ollama url provided, listing embedding models, returning empty list")
+            return []
         logger.debug(f"Listing Ollama embedding models at {url}")
         r = [
             x["name"]
