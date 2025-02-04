@@ -53,20 +53,20 @@ def test():
 async def update_model_lists():
     """Update chat/embed model lists."""
     try:
-        az = await AzureOpenAI.list_models()
-        ol = await Ollama.list_models()
-        oai = await OpenAI.list_models()
+        az = AzureOpenAI.list_models()
+        ol = Ollama.list_models()
+        oai = OpenAI.list_models()
         OLLAMA_MODELS["CHAT"] = ol
         AZURE_MODELS["CHAT"] = az
         OPENAI_MODELS["CHAT"] = oai
-        az = await AzureOpenAIEmbedding.list_models()
-        ol = await OllamaEmbedding.list_models()
+        az = AzureOpenAIEmbedding.list_models()
+        ol = OllamaEmbedding.list_models()
         OLLAMA_MODELS["EMBED"] = ol
         AZURE_MODELS["EMBED"] = az
     except Exception as exc:
         logger.error(f"Error in updating model lists: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"status": "success"}
+    return '{"status": "updated model lists"}'
 
 
 @app.get("/chat/list")
@@ -334,7 +334,7 @@ async def pull_ollama_model(model: str):
                     async for line in response.aiter_lines():
                         yield line + "\n"
             # Call the update_model_lists function after streaming is done
-            await update_model_lists()
+                yield await update_model_lists()
         except httpx.ReadTimeout as exc:
             logger.error(f"Timeout error in Ollama model pull: {exc}")
             yield json.dumps(
