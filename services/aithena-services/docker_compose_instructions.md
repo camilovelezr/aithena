@@ -191,5 +191,3 @@ The response will be a list of id values corresponding to the most similar embed
    You should get the response: `[5,6,10,9,3,1,2,4,7,8]`
 
    
-
-#axle/ai
