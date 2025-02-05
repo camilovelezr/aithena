@@ -40,9 +40,6 @@ To see all available models in `aithena-services` run:
 `curl localhost:8000/chat/list` and you will get a list of the names of the available models, e.g: `[llama3.1, llama3.2:1b]`
 
 ### Chat with a model
-To chat with model `X` , do a `POST` request to `localhost:8000/chat/X/generate`, e.g:
-to chat with llama3.2:1b. The
-Here’s a paragraph you can include at the top as documentation or instructions:
 
 To interact with a chat model, send a POST request to the /chat/{model}/generate endpoint, replacing {model} with the desired model name. The request body should contain a list of messages representing the conversation history or a single string message. If providing a list, each message should be a dictionary with role ("system", "user", or "assistant") and content. To stream responses, set the stream query parameter to true. Example requests can be made using curl, such as:
 ```
