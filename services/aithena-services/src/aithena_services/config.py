@@ -36,6 +36,9 @@ for key, value in env.items():
         k = key.split("_")[-1].lower()
         AZURE_OPENAI_EMBED_MODELS_DICT[k] = value
 
+# ----Groq----
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)
+
 # ----Memory----
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")

@@ -1,3 +1,7 @@
+from multiprocessing.dummy import list
+from pickle import LIST
+from tkinter.constants import GROOVE
+
 # mypy: disable-error-code="import-untyped"
 """Aithena-Services FastAPI REST Endpoints. """
 
@@ -14,8 +18,10 @@ from aithena_services.embeddings.ollama import OllamaEmbedding
 from aithena_services.llms.azure_openai import AzureOpenAI
 from aithena_services.llms.ollama import Ollama
 from aithena_services.llms.openai import OpenAI
+from aithena_services.llms.groq import Groq
 from aithena_services.memory.pgvector import similarity_search
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from polus.aithena.common.logger import get_logger
 
@@ -23,22 +29,32 @@ logger = get_logger("aithena_services.api")
 
 
 app = FastAPI()
-OLLAMA_MODELS = {"EMBED": OllamaEmbedding.list_models(),
-                 "CHAT": Ollama.list_models()}
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+OLLAMA_MODELS = {"EMBED": OllamaEmbedding.list_models(), "CHAT": Ollama.list_models()}
 AZURE_MODELS = {
     "EMBED": AzureOpenAIEmbedding.list_models(),
     "CHAT": AzureOpenAI.list_models(),
 }
 OPENAI_MODELS = {"EMBED": [], "CHAT": OpenAI.list_models()}
+GROQ_MODELS = {"EMBED": [], "CHAT": Groq.list_models()}
 
 
 def check_platform(platform: str):
     """Check if the platform is valid."""
-    if platform not in ["ollama", "azure", "openai"]:
+    if platform not in ["ollama", "azure", "openai", "groq"]:
         logger.error(f"Invalid platform: {platform}")
         raise HTTPException(
             status_code=404,
-            detail="Invalid platform, must be 'ollama', 'azure', or 'openai'.",
+            detail="Invalid platform, must be 'ollama', 'azure', 'openai', or 'groq'.",
         )
 
 
@@ -56,9 +72,11 @@ async def update_model_lists():
         az = AzureOpenAI.list_models()
         ol = Ollama.list_models()
         oai = OpenAI.list_models()
+        gai = Groq.list_models()
         OLLAMA_MODELS["CHAT"] = ol
         AZURE_MODELS["CHAT"] = az
         OPENAI_MODELS["CHAT"] = oai
+        GROQ_MODELS["CHAT"] = gai
         az = AzureOpenAIEmbedding.list_models()
         ol = OllamaEmbedding.list_models()
         OLLAMA_MODELS["EMBED"] = ol
@@ -76,13 +94,16 @@ def list_chat_models():
         az = AzureOpenAI.list_models()
         ol = Ollama.list_models()
         oai = OpenAI.list_models()
+        gai = Groq.list_models()
         OLLAMA_MODELS["CHAT"] = ol
         AZURE_MODELS["CHAT"] = az
         OPENAI_MODELS["CHAT"] = oai
+        GROQ_MODELS["CHAT"] = gai
+
     except Exception as exc:
         logger.error(f"Error in listing chat models: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))
-    return [*az, *ol, *oai]
+    return [*az, *ol, *oai, *gai]
 
 
 @app.get("/chat/list/{platform}")
@@ -110,6 +131,17 @@ def list_chat_models_by_platform(platform: str):
             raise HTTPException(
                 status_code=400,
                 detail=f"There was a problem listing chat models in OpenAI: {str(exc)}",
+            )
+    if platform == "groq":
+        try:
+            r = Groq.list_models()
+            GROQ_MODELS["CHAT"] = r
+            return r
+        except Exception as exc:
+            logger.error(f"Error in listing chat models in Groq: {exc}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"There was a problem listing chat models in Groq: {str(exc)}",
             )
     try:
         r = Ollama.list_models()
@@ -173,11 +205,19 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
         try:
             return OpenAI(model=model)
         except Exception as exc:
-            logger.error(
-                f"Error in resolving OpenAI client for model: {model}")
+            logger.error(f"Error in resolving OpenAI client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving OpenAI chat client for model: {model}, {str(exc)}",
+            )
+    if model in GROQ_MODELS["CHAT"]:
+        try:
+            return Groq(model=model)
+        except Exception as exc:
+            logger.error(f"Error in resolving Groq client for model: {model}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Error in resolving Groq chat client for model: {model}, {str(exc)}",
             )
     if f"{model}:latest" in OLLAMA_MODELS["CHAT"]:
         return resolve_client_chat(f"{model}:latest", num_ctx)
@@ -186,8 +226,7 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
             if num_ctx:
                 return Ollama(model=model, context_window=num_ctx, request_timeout=500)
         except Exception as exc:
-            logger.error(
-                f"Error in resolving Ollama client for model: {model}")
+            logger.error(f"Error in resolving Ollama client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}",
@@ -195,8 +234,7 @@ def resolve_client_chat(model: str, num_ctx: Optional[int]):
         try:
             return Ollama(model=model)
         except Exception as exc:
-            logger.error(
-                f"Error in resolving Ollama client for model: {model}")
+            logger.error(f"Error in resolving Ollama client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Ollama chat client for model: {model}, {str(exc)}",
@@ -211,8 +249,7 @@ def resolve_client_embed(model: str):
         try:
             return AzureOpenAIEmbedding(deployment=model)
         except Exception as exc:
-            logger.error(
-                f"Error in resolving Azure embed client for model: {model}")
+            logger.error(f"Error in resolving Azure embed client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Azure embed client for model: {model}, {str(exc)}",
@@ -221,8 +258,7 @@ def resolve_client_embed(model: str):
         try:
             return OllamaEmbedding(model=f"{model}:latest")
         except Exception as exc:
-            logger.error(
-                f"Error in resolving Ollama embed client for model: {model}")
+            logger.error(f"Error in resolving Ollama embed client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}",
@@ -231,8 +267,7 @@ def resolve_client_embed(model: str):
         try:
             return OllamaEmbedding(model=model)
         except Exception as exc:
-            logger.error(
-                f"Error in resolving Ollama embed client for model: {model}")
+            logger.error(f"Error in resolving Ollama embed client for model: {model}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Error in resolving Ollama embed client for model: {model}, {str(exc)}",
@@ -273,7 +308,6 @@ async def generate_from_msgs(
                 yield json.dumps(
                     {"error": f"Timeout error in chat stream response: {exc}"}
                 ) + "\n"
-                # raise HTTPException(status_code=408, detail="Timeout error in chat stream response")
             except Exception as exc:
                 logger.error(f"Error in chat stream response: {str(exc)}")
                 yield json.dumps(
@@ -333,7 +367,7 @@ async def pull_ollama_model(model: str):
                 ) as response:
                     async for line in response.aiter_lines():
                         yield line + "\n"
-            # Call the update_model_lists function after streaming is done
+                # Call the update_model_lists function after streaming is done
                 yield await update_model_lists()
         except httpx.ReadTimeout as exc:
             logger.error(f"Timeout error in Ollama model pull: {exc}")
