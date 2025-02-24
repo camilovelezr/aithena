@@ -421,6 +421,7 @@ def search_pgvector(
     table_name: str,
     vector: list[float],
     n: int = 10,
+    full: bool = False,
 ):
     """
     Search for similar vectors in a specified table using pgvector with cosine distance.
@@ -438,7 +439,7 @@ def search_pgvector(
         HTTPException: If there is an error during the similarity search.
     """
     try:
-        res = similarity_search(table_name, vector, n)
+        res = similarity_search(table_name, vector, n, full)
     except Exception as exc:
         logger.error(f"Error in similarity search: {exc}")
         raise HTTPException(status_code=400, detail=str(exc))

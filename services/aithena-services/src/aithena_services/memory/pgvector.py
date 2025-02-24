@@ -111,10 +111,88 @@ def similarity_search(
     table_name: str,
     vector: list[float],
     limit: int,
-) -> list[str]:
+    full: bool = False,
+) -> list[Work]:
     """
     Search for similar works.
-    The table should have a column named 'embedding' of type vector and one called 'id'.
+
+    If full is set to True, the full Work object is returned.
+    If full is set to False, only the basic work metadata with
+    authorships is returned.
+
+    Args:
+        table_name (str): The name of the table to search in.
+        vector (list[float]): The vector to search for similarities.
+        limit (int, optional): The maximum number of similar vectors to return.
+        full (bool, optional): Whether to query and return the full Work object.
+
+    Returns:
+        list[Work]: A list of Work objects as dict.
+    """
+    if not full:
+        query = f"""
+        WITH limited_works AS (
+        SELECT works.id
+        FROM {table_name} AS emb
+        JOIN openalex.works AS works
+            ON emb.work_id = works.id
+        ORDER BY emb.embedding <=> '{vector}'
+        LIMIT {limit}
+        )
+        SELECT
+            row_to_json(works)::jsonb || jsonb_build_object(
+                'authorships',
+                CASE
+                    WHEN COUNT(works_authorships.work_id) = 0 THEN NULL
+                    ELSE json_agg(
+                        DISTINCT json_build_object(
+                            'author', json_build_object(
+                                'display_name', authors.display_name,
+                                'id', works_authorships.author_id
+                            )::jsonb
+                        )::jsonb
+                    )
+                END
+            ) AS work_with_authorships
+        FROM limited_works
+        JOIN openalex.works AS works
+            ON limited_works.id = works.id
+        LEFT JOIN openalex.works_authorships AS works_authorships
+            ON works.id = works_authorships.work_id
+        LEFT JOIN openalex.authors AS authors
+            ON works_authorships.author_id = authors.id
+        GROUP BY works.id;  
+        """
+    else:
+        query = return_query_full_work(table_name, vector, limit)
+
+    with psycopg.connect(DB_CONFIG_STRING) as conn:
+        with conn.cursor() as cur:
+            try:
+                query_to_log = re.sub(r"\[.*?\]", "[...]", query)
+                logger.debug(
+                    f"Performing similarity search with query: {query_to_log}")
+                cur.execute(query)
+                res = cur.fetchall()
+
+                if full:
+                    works = [Work(**w) for w in res[0][0]]
+                else:
+                    works = [Work(**w[0]) for w in res]
+            except Exception as e:
+                logger.error(f"Error when performing similarity search: {e}")
+                raise e
+
+    return works
+
+
+def work_ids_by_similarity_search(
+    table_name: str,
+    vector: list[float],
+    limit: int,
+) -> list[str]:
+    """
+    Search for similar works and return only id.
 
     Args:
         table_name (str): The name of the table to search in.
@@ -125,7 +203,8 @@ def similarity_search(
         list[str]: A list of IDs of the similar vectors found.
     """
     query = f"""
-    SELECT id FROM {table_name}
+    SELECT work_id
+    FROM {table_name}
     ORDER BY embedding <=> '{vector}' LIMIT {limit};
     """
 
@@ -137,12 +216,53 @@ def similarity_search(
                     f"Performing similarity search with query: {query_to_log}")
                 cur.execute(query)
                 res = cur.fetchall()
-                return_res = [r[0] for r in res]
-
-                logger.debug(f"!!!!!!!!!!!! res {res}")
-
+                res_to_return = [r[0] for r in res]
             except Exception as e:
                 logger.error(f"Error when performing similarity search: {e}")
                 raise e
 
-    return return_res
+    return res_to_return
+
+
+def works_by_similarity_search(
+    table_name: str,
+    vector: list[float],
+    limit: int,
+) -> list[Work]:
+    """
+    Search for similar works and return just basic work metadata.
+
+    Args:
+        table_name (str): The name of the table to search in.
+        vector (list[float]): The vector to search for similarities.
+        limit (int, optional): The maximum number of similar vectors to return.
+
+    Returns:
+        list[str]: A list of IDs of the similar vectors found.
+    """
+    query = f"""
+    WITH selected_work_ids AS (
+    SELECT work_id
+    FROM {table_name}
+    ORDER BY embedding <=> '{vector}' LIMIT {limit}
+    )
+    SELECT w.*
+    FROM openalex.works w
+    JOIN selected_work_ids s ON w.id = s.work_id;
+    ;
+    """
+
+    with psycopg.connect(DB_CONFIG_STRING) as conn:
+        with conn.cursor() as cur:
+            try:
+                query_to_log = re.sub(r"\[.*?\]", "[...]", query)
+                logger.debug(
+                    f"Performing similarity search with query: {query_to_log}")
+                cur.execute(query)
+                res = cur.fetchall()
+                works = [Work.from_sql(work) for work in res]
+            except Exception as e:
+                logger.error(f"Error when performing similarity search: {e}")
+                raise e
+
+    return works
