@@ -1,1 +1,5 @@
 docker.env
+*.code-workspace
+# dev for docker
+*ollama_data
+*pgdata
