@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && \
 RUN pip3 install "${EXEC_DIR}/aithena/services/aithena-services"
 
 # Expose the application port
-EXPOSE 80
+EXPOSE 8000
 
 # Run the application
-CMD ["bash", "-c", "uvicorn aithena_services.api.main:app --host 0.0.0.0 --port 80"]
+CMD ["bash", "-c", "uvicorn aithena_services.api.main:app --host 0.0.0.0 --port 8000"]
