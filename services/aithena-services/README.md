@@ -1,4 +1,4 @@
-# aithena-services 0.1.3-dev0
+# aithena-services 1.0.0-dev0
 
 Aithena-services provides a unified way to interact with many LLMs.
 
