@@ -3,29 +3,19 @@
 
 # pylint: disable=W1203, C0412, C0103, W0212, W0707, W0718
 
-from aithena_services.config import time_logger
 from aithena_services.memory.pgvector import (
     similarity_search,
     work_ids_by_similarity_search,
     works_by_similarity_search,
 )
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from polus.aithena.common.logger import get_logger
+from polus.aithena.common.utils import time_logger
 
 logger = get_logger("aithena_services.api")
 
 
 app = FastAPI()
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
 
 @time_logger
