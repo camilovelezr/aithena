@@ -1,6 +1,6 @@
 [tool.poetry]
 authors = ["Camilo Velez <camilo.velezramirez@nih.gov>"]
-description = "get-openalex"
+description = "get-openalex - Tool for downloading OpenAlex records from their S3 bucket and interacting with OpenAlex REST API"
 name = "get-openalex"
 packages = [{include = "polus", from = "src"}]
 readme = "README.md"
@@ -12,6 +12,19 @@ python = ">=3.11,<3.13"
 boto3 = "^1.35.63"
 polus-aithena-common = {path = "../../common", develop = true}
 tqdm = "^4.67.0"
+typer = "^0.9.0"
+python-dotenv = "^1.0.0"
+requests = "^2.31.0"
+aiohttp = "^3.9.1"
+pydantic = "^2.5.2"
+sqlmodel = "^0.0.14"
+psycopg2-binary = "^2.9.9"
+fastapi = {version = "^0.109.0", optional = true}
+uvicorn = {version = "^0.25.0", extras = ["standard"], optional = true}
+
+[tool.poetry.extras]
+api = ["fastapi", "uvicorn"]
+
 [tool.poetry.group.dev.dependencies]
 bump2version = "^1.0.1"
 pre-commit = "^3.8.0"
@@ -32,3 +45,5 @@ asyncio_mode = "auto"
 
 [tool.poetry.scripts]
 get-openalex = "polus.aithena.jobs.getopenalex.__main__:app"
+get-openalex-s3 = "polus.aithena.jobs.getopenalex.s3.__main__:app"
+get-openalex-api = "polus.aithena.jobs.getopenalex.api.run:main"
