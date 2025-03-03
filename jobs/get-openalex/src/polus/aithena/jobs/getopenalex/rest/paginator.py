@@ -17,6 +17,7 @@ from .get_works import (
     iter_filtered_works_cursor,
     iter_filtered_works_offset,
     pyalex_to_model,
+    get_filtered_works_dict_async,
 )
 from .metrics import metrics_collector
 from polus.aithena.common.logger import get_logger
@@ -49,6 +50,10 @@ class WorksPaginator(BaseModel):
     """
 
     options: PaginatorOptions
+    current_page: int = 1
+    count: Optional[int] = None
+    has_next: bool = True
+    search: Optional[str] = None  # Add search as a public field
 
     # Use ConfigDict for Pydantic v2
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -64,15 +69,27 @@ class WorksPaginator(BaseModel):
                 if field in data:
                     options_data[field] = data.pop(field)
             data["options"] = PaginatorOptions(**options_data)
+        
+        # Handle initial_page parameter if provided
+        if "initial_page" in data:
+            data["current_page"] = data.pop("initial_page")
 
         super().__init__(**data)
+        
+        # Initialize query with filters
         self._query = Works().filter(**self.options.filters)
+        
+        # Add search parameter if provided
+        if self.search:
+            self._query = self._query.search(self.search)
 
     @property
     def query(self):
         """Access the query object"""
         if self._query is None:
             self._query = Works().filter(**self.options.filters)
+            if self.search:
+                self._query = self._query.search(self.search)
         return self._query
 
     @property
@@ -109,6 +126,19 @@ class WorksPaginator(BaseModel):
     def collect_metrics(self) -> bool:
         """Access collect_metrics from options"""
         return self.options.collect_metrics
+
+    @property
+    def total_pages(self) -> Optional[int]:
+        """
+        Calculate the total number of pages based on the count and per_page.
+        
+        Returns:
+            Optional[int]: The total number of pages, or None if count is not available
+        """
+        if self.count is None:
+            return None
+        
+        return (self.count + self.per_page - 1) // self.per_page
 
     def __iter__(self) -> Iterator[Union[Work, PyalexWork]]:
         """
@@ -216,3 +246,45 @@ class WorksPaginator(BaseModel):
             summary["metrics"] = metrics_collector.get_summary()
 
         return summary
+
+    async def get_page_async(self) -> List[Union[Work, PyalexWork]]:
+        """
+        Asynchronously get a single page of works.
+        
+        Returns:
+            List of works for the current page
+        """
+        # Get works for the current page
+        result = await get_filtered_works_dict_async(
+            self.filters, 
+            page=self.current_page, 
+            per_page=self.per_page,
+            api_key=None,  # Use default API key
+            search=self.search
+        )
+        
+        # Update pagination information
+        if result and "meta" in result:
+            meta = result["meta"]
+            self.count = meta.get("count")
+            self.has_next = bool(meta.get("next_cursor") or 
+                               (meta.get("page") and meta.get("per_page") and 
+                                meta.get("count") and 
+                                meta.get("page") * meta.get("per_page") < meta.get("count")))
+        else:
+            self.has_next = False
+            
+        # Process works
+        works = []
+        if result and "results" in result and result["results"]:
+            if self.convert_to_model:
+                works = [pyalex_to_model(PyalexWork(work)) for work in result["results"]]
+            else:
+                works = [PyalexWork(work) for work in result["results"]]
+                
+        # Track metrics if enabled
+        if self.collect_metrics:
+            metrics_collector.api_calls += 1
+            metrics_collector.results_retrieved += len(works)
+            
+        return works

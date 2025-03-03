@@ -4,8 +4,6 @@
 This module provides a unified CLI interface for both S3 operations and REST API interactions.
 """
 import typer
-from pathlib import Path
-from datetime import date
 from typing import Optional
 
 from polus.aithena.jobs.getopenalex.s3.__main__ import app as s3_app
@@ -78,6 +76,19 @@ def search_works(
             writer.writerow([work.id, work.title, work.publication_date, work.doi])
     else:
         typer.echo(f"Unknown output format: {output_format}")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Host to bind the API server to"),
+    port: int = typer.Option(8000, help="Port for the API server"),
+    reload: bool = typer.Option(False, help="Enable auto-reload for development"),
+):
+    """Start the OpenAlex API server."""
+    from polus.aithena.jobs.getopenalex.api.run import start_server
+    
+    typer.echo(f"Starting API server at {host}:{port}")
+    start_server(host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

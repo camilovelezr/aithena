@@ -2,6 +2,7 @@
 
 # Local imports
 from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.config import API_REQUEST_TIMEOUT, API_MAX_RETRIES
 
 logger = get_logger(__name__)
 
@@ -25,8 +26,8 @@ class APIError(OpenAlexError):
 
 
 # Constants
-DEFAULT_TIMEOUT = 30  # seconds
-MAX_RETRIES = 3
+DEFAULT_TIMEOUT = API_REQUEST_TIMEOUT  # seconds
+MAX_RETRIES = API_MAX_RETRIES
 RATE_LIMIT_DELAY = 1  # second
 logger.debug(f"DEFAULT_TIMEOUT: {DEFAULT_TIMEOUT}")
 logger.debug(f"MAX_RETRIES: {MAX_RETRIES}")
