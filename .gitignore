@@ -195,6 +195,7 @@ cython_debug/
 
 # vscode
 .vscode
+*.code-workspace
 
 
 #macOS

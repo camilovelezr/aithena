@@ -74,9 +74,9 @@ The system can be configured using environment variables:
 - `JOB_DATABASE_URL`: SQLite database path for job tracking (default: `sqlite:///./openalex_jobs.db`)
 
 ### Optional PostgreSQL Integration
-- `OPENALEX_POSTGRES_URL`: PostgreSQL connection string *(only needed if using PostgreSQL storage)*
-- `OPENALEX_UPDATE_BATCH_SIZE`: Number of records to process in a batch (default: `100`)
-- `OPENALEX_UPDATE_MAX_RECORDS`: Maximum number of records to process per job (default: `10000`)
+- `POSTGRES_URL`: PostgreSQL connection string *(only needed if using PostgreSQL storage)*
+- `UPDATE_BATCH_SIZE`: Number of records to process in a batch (default: `100`)
+- `UPDATE_MAX_RECORDS`: Maximum number of records to process per job (default: `10000`)
 
 ## 🔗 Related Resources
 
