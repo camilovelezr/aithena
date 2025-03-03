@@ -9,7 +9,7 @@ import logging
 import sys
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 # Standard log levels
 TRACE = 5
@@ -29,7 +29,7 @@ class StructuredLogFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record as a JSON string."""
-        timestamp = datetime.utcfromtimestamp(record.created).isoformat() + "Z"
+        timestamp = datetime.fromtimestamp(record.created).isoformat()
 
         # Basic log data
         log_data = {

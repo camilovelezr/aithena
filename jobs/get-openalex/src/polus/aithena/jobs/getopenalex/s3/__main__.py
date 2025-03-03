@@ -7,23 +7,23 @@ from pathlib import Path
 import typer
 from polus.aithena.common.logger import get_logger
 from polus.aithena.common.utils import init_dir
-from polus.aithena.jobs.getopenalex.s3.config import (
-    FROM_DATE,
-    ALL_LAST_MONTH,
-    OUTPUT_PATH,
+from polus.aithena.jobs.getopenalex.config import (
+    S3_FROM_DATE,
+    S3_ALL_LAST_MONTH,
+    S3_OUTPUT_PATH,
 )
 from polus.aithena.jobs.getopenalex.s3.s3_types import SnapshotS3, TYPES
 
 app = typer.Typer()
 
-if OUTPUT_PATH is not None:
-    OUTPUT_PATH = init_dir(Path(OUTPUT_PATH))
+if S3_OUTPUT_PATH is not None:
+    S3_OUTPUT_PATH = init_dir(Path(S3_OUTPUT_PATH))
 
 
 @app.command()
 def download(
     out_dir: Path | None = typer.Option(
-        OUTPUT_PATH,
+        S3_OUTPUT_PATH,
         "--outDir",
         file_okay=False,
         dir_okay=True,
@@ -31,7 +31,7 @@ def download(
         help="Output directory",
     ),
     from_date: str | None = typer.Option(
-        FROM_DATE,
+        S3_FROM_DATE,
         "--fromDate",
         help="Download from this date (inclusive)",
     ),
@@ -44,7 +44,7 @@ def download(
     """Download OpenAlex snapshots from S3 Bucket."""
     logger = get_logger(__file__)
     logger.info(f"outDir = {out_dir}")
-    if ALL_LAST_MONTH:
+    if S3_ALL_LAST_MONTH:
         today_ = date.today()
         from_date = today_.replace(day=1, month=today_.month - 1).isoformat()
     logger.info(f"fromDate = {from_date}")
@@ -77,7 +77,7 @@ def list_available(
         help="List only this type of data",
     ),
     from_date: str | None = typer.Option(
-        FROM_DATE,
+        S3_FROM_DATE,
         "--fromDate",
         help="List from this date (inclusive)",
     ),
@@ -85,7 +85,7 @@ def list_available(
     """List available OpenAlex snapshots in S3 Bucket."""
     logger = get_logger(__file__)
 
-    if ALL_LAST_MONTH:
+    if S3_ALL_LAST_MONTH:
         today_ = date.today()
         from_date = today_.replace(day=1, month=today_.month - 1).isoformat()
     logger.info(f"fromDate = {from_date}")

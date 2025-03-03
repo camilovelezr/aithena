@@ -4,15 +4,17 @@ This module provides SQLModel models and database interaction utilities
 for tracking job execution history and metadata.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import os
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from uuid import uuid4
 
 from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select
-from pydantic import validator
+from sqlalchemy import JSON
 
-from polus.aithena.jobs.getopenalex.api.logging import get_logger
+from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.config import JOB_DATABASE_URL
 
 logger = get_logger(__name__)
 
@@ -62,7 +64,7 @@ class Job(SQLModel, table=True):
     records_failed: int = Field(default=0)
 
     # Additional metadata
-    parameters: Dict[str, Any] = Field(default_factory=dict)
+    parameters: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
     error_message: Optional[str] = Field(default=None)
 
     # Relationships
@@ -92,7 +94,7 @@ class JobLog(SQLModel, table=True):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     level: str = Field(default="INFO")
     message: str
-    details: Dict[str, Any] = Field(default_factory=dict)
+    details: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
 
     # Relationship
     job: Job = Relationship(back_populates="job_logs")
@@ -103,10 +105,8 @@ class Database:
     """Database connection and session management."""
 
     def __init__(self, database_url: str = None):
-        # Use environment variable if provided, otherwise use default
-        self.database_url = database_url or os.getenv(
-            ENV_JOB_DATABASE_URL, DEFAULT_DATABASE_URL
-        )
+        # Use provided URL, config setting, or default
+        self.database_url = database_url or JOB_DATABASE_URL or DEFAULT_DATABASE_URL
 
         # Ensure directory exists for SQLite database if using a file path
         if self.database_url.startswith("sqlite:///"):

@@ -2,12 +2,14 @@
 
 # Standard library imports
 import asyncio
+import os
 import time
 from functools import lru_cache
 from itertools import chain
 from typing import List, Union, Optional, Any, Dict, Iterator, AsyncIterator
 
 # Third-party imports
+import pyalex
 from pyalex import Works
 from pyalex import Work as PyalexWork
 from openalex_types import Work
@@ -17,9 +19,11 @@ from .common import OpenAlexError, APIError, RATE_LIMIT_DELAY
 from .metrics import metrics_collector
 from .wrappers import with_retry
 from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.config import OPENALEX_API_KEY, PYALEX_EMAIL
 
 logger = get_logger(__name__)
 
+pyalex.config.email = os.getenv("PYALEX_EMAIL", None)
 
 @lru_cache(maxsize=128)
 def get_filtered_works(
@@ -119,8 +123,10 @@ def pyalex_to_model(work: PyalexWork) -> Work:
         # The work object already contains the data, not need to call get()
         # Just convert it directly to a dictionary
         work_data = work
-        # Convert to openalex_types.Work model
-        return Work.model_validate(work_data)
+        
+        # Handle datetime conversion to suppress warnings
+        # Use model_validate with strict=False to allow automatic conversion of string dates to datetime
+        return Work.model_validate(work_data, strict=False)
     except Exception as e:
         logger.error(f"Error converting PyalexWork to Work model: {e}")
         raise OpenAlexError(f"Model conversion error: {str(e)}")
@@ -438,3 +444,103 @@ def _chunked_tasks(tasks, chunk_size):
     """Helper function to chunk tasks for controlled concurrency"""
     for i in range(0, len(tasks), chunk_size):
         yield tasks[i : i + chunk_size]
+
+
+async def get_filtered_works_dict_async(
+    filters: Dict[str, Any],
+    page: int = 1,
+    per_page: int = 25,
+    cursor: Optional[str] = None,
+    api_key: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Asynchronously get a page of works as a dictionary with metadata.
+
+    Args:
+        filters: Dictionary of filters to apply
+        page: Page number for offset-based pagination (default: 1)
+        per_page: Number of results per page (default: 25)
+        cursor: Cursor for cursor-based pagination (default: None)
+        api_key: OpenAlex API key (default: None, uses environment variable)
+        search: Search query (default: None)
+
+    Returns:
+        Dictionary with metadata and results
+    """
+    import aiohttp
+    import urllib.parse
+
+    logger.info(f"Asynchronously fetching works page {page} with filters: {filters}")
+    
+    base_url = "https://api.openalex.org/works"
+    
+    # Build query parameters
+    params = {}
+    
+    # Add filters - handle them as multiple parameters with the same name
+    for key, value in filters.items():
+        # Create a new key value pair for each filter
+        filter_key = "filter"
+        filter_value = f"{key}:{value}"
+        
+        # Add to params, allowing multiple values with the same key
+        if filter_key in params:
+            if isinstance(params[filter_key], list):
+                params[filter_key].append(filter_value)
+            else:
+                params[filter_key] = [params[filter_key], filter_value]
+        else:
+            params[filter_key] = filter_value
+    
+    # Add search if present
+    if search:
+        params["search"] = search
+    
+    # Add pagination parameters
+    params["per_page"] = per_page
+    if cursor:
+        params["cursor"] = cursor
+    else:
+        params["page"] = page
+        
+    # Add API key if provided
+    if api_key:
+        params["api_key"] = api_key
+    elif OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
+    
+    # Prepare URL
+    query_string = urllib.parse.urlencode(params, doseq=True)
+    url = f"{base_url}?{query_string}"
+    
+    start_time = time.time()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise APIError(f"API request failed with status {response.status}: {error_text}")
+                
+                result = await response.json()
+                
+                # Calculate request time in milliseconds
+                duration_ms = (time.time() - start_time) * 1000
+                
+                # Record metrics
+                results_count = len(result.get("results", [])) if "results" in result else 0
+                metrics_collector.record_request(
+                    duration_ms=duration_ms,
+                    success=True,
+                    cached=False,
+                    results_count=results_count
+                )
+                
+                return result
+    except Exception as e:
+        # Calculate request time in milliseconds even for failed requests
+        duration_ms = (time.time() - start_time) * 1000
+        metrics_collector.record_request(duration_ms=duration_ms, success=False)
+        
+        logger.error(f"Error in async API request: {e}")
+        raise APIError(f"Failed to fetch works asynchronously: {str(e)}")
