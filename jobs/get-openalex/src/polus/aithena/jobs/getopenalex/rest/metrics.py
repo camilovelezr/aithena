@@ -24,6 +24,8 @@ class MetricsCollector:
         self.cache_misses = 0
         self.start_time = None
         self.end_time = None
+        self.api_calls = 0
+        self.results_retrieved = 0
 
     def start_session(self):
         """Start a new metrics collection session"""
@@ -32,16 +34,20 @@ class MetricsCollector:
         self.failed_requests = 0
         self.cache_hits = 0
         self.cache_misses = 0
+        self.api_calls = 0
+        self.results_retrieved = 0
         self.start_time = datetime.now()
 
     def end_session(self):
         """End the current metrics collection session"""
         self.end_time = datetime.now()
 
-    def record_request(self, duration_ms, success=True, cached=False):
+    def record_request(self, duration_ms, success=True, cached=False, results_count=0):
         """Record a single API request"""
         self.request_times.append(duration_ms)
         self.total_requests += 1
+        self.api_calls += 1
+        self.results_retrieved += results_count
         if not success:
             self.failed_requests += 1
         if cached:
@@ -63,6 +69,8 @@ class MetricsCollector:
             "failed_requests": self.failed_requests,
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
+            "api_calls": self.api_calls,
+            "results_retrieved": self.results_retrieved,
             "success_rate": (
                 (self.total_requests - self.failed_requests) / self.total_requests
                 if self.total_requests > 0

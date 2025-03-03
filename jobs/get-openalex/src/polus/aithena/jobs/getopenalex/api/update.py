@@ -6,18 +6,13 @@ data from the OpenAlex API. It includes incremental updates based on modificatio
 
 from datetime import datetime, timedelta
 import os
-from typing import Dict, List, Optional, Any, Tuple, Iterator
-import time
+from typing import Dict, Optional, Any, Iterator
 
-from sqlmodel import Session, SQLModel, create_engine, select, col
+from sqlmodel import Session, SQLModel, create_engine, select, col, Field
 from pydantic import BaseModel
+from sqlalchemy import JSON
 
-from polus.aithena.jobs.getopenalex import (
-    get_filtered_works,
-    iter_filtered_works_cursor,
-    WorksPaginator,
-    OpenAlexError,
-)
+from polus.aithena.jobs.getopenalex import iter_filtered_works_cursor
 from polus.aithena.jobs.getopenalex.api.logging import JobLogger
 from polus.aithena.jobs.getopenalex.api.database import (
     Database,
@@ -26,15 +21,11 @@ from polus.aithena.jobs.getopenalex.api.database import (
     JobStatus,
     Job,
 )
+from polus.aithena.jobs.getopenalex.config import POSTGRES_URL, UPDATE_BATCH_SIZE, UPDATE_MAX_RECORDS
 
 
 # Default PostgreSQL connection string - should be overridden by environment variables
 DEFAULT_POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/openalex"
-
-# Environment variable names
-ENV_POSTGRES_URL = "OPENALEX_POSTGRES_URL"
-ENV_BATCH_SIZE = "OPENALEX_UPDATE_BATCH_SIZE"
-ENV_MAX_RECORDS = "OPENALEX_UPDATE_MAX_RECORDS"
 
 # Default values
 DEFAULT_BATCH_SIZE = 100
@@ -73,9 +64,7 @@ class OpenAlexDBUpdater:
         max_records: int = None,
     ):
         # PostgreSQL connection
-        self.postgres_url = postgres_url or os.getenv(
-            ENV_POSTGRES_URL, DEFAULT_POSTGRES_URL
-        )
+        self.postgres_url = postgres_url or POSTGRES_URL or DEFAULT_POSTGRES_URL
         self.pg_engine = create_engine(self.postgres_url, echo=False)
 
         # Job database
@@ -83,12 +72,8 @@ class OpenAlexDBUpdater:
         self.job_repo = JobRepository(self.job_db)
 
         # Configuration
-        self.batch_size = batch_size or int(
-            os.getenv(ENV_BATCH_SIZE, DEFAULT_BATCH_SIZE)
-        )
-        self.max_records = max_records or int(
-            os.getenv(ENV_MAX_RECORDS, DEFAULT_MAX_RECORDS)
-        )
+        self.batch_size = batch_size or UPDATE_BATCH_SIZE or DEFAULT_BATCH_SIZE
+        self.max_records = max_records or UPDATE_MAX_RECORDS or DEFAULT_MAX_RECORDS
 
         # Ensure tables exist
         self._ensure_tables()
@@ -108,8 +93,8 @@ class OpenAlexDBUpdater:
             publication_date: Optional[str] = Field(default=None, index=True)
             doi: Optional[str] = Field(default=None, index=True)
             updated_date: Optional[str] = Field(default=None, index=True)
-            data: Dict[str, Any] = Field(default_factory=dict)
-            last_updated: datetime = Field(default_factory=datetime.utcnow)
+            data: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+            last_updated: datetime = Field(default_factory=datetime.now)
 
         # Create tables if they don't exist
         SQLModel.metadata.create_all(self.pg_engine)
@@ -121,7 +106,7 @@ class OpenAlexDBUpdater:
             return last_job.parameters["from_date"]
 
         # Default to 7 days ago if no previous job
-        default_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        default_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         return default_date
 
     def update_works(
@@ -295,7 +280,7 @@ class OpenAlexDBUpdater:
 
                 # Update full data JSON and timestamp
                 existing_work.data = work_data
-                existing_work.last_updated = datetime.utcnow()
+                existing_work.last_updated = datetime.now()
 
                 session.add(existing_work)
                 session.commit()
@@ -312,7 +297,7 @@ class OpenAlexDBUpdater:
                     doi=work_record.doi,
                     updated_date=work_record.updated_date,
                     data=work_data,
-                    last_updated=datetime.utcnow(),
+                    last_updated=datetime.now(),
                 )
                 session.execute(stmt)
                 session.commit()
