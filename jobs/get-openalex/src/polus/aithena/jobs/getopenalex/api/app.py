@@ -3,19 +3,15 @@
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from fastapi import FastAPI, Query, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import os
 
 from polus.aithena.common.logger import get_logger
 from polus.aithena.jobs.getopenalex import (
-    get_filtered_works,
-    get_filtered_works_dict,
     get_filtered_works_async,
-    iter_filtered_works_cursor,
     WorksPaginator,
-    PaginatorOptions,
     OpenAlexError,
     RateLimitError,
     APIError,
@@ -27,12 +23,8 @@ from polus.aithena.jobs.getopenalex.api.database import (
     JobType,
     JobStatus,
     Job as DBJob,
-    JobLog,
 )
-from polus.aithena.jobs.getopenalex.api.update import (
-    run_works_update,
-    OpenAlexDBUpdater,
-)
+from polus.aithena.jobs.getopenalex.api.update import run_works_update
 
 logger = get_logger(__name__)
 
@@ -322,7 +314,7 @@ async def get_work_by_id(work_id: str):
         else:
             formatted_id = work_id
 
-        works = await get_filtered_works_async(filters={"id": formatted_id}, limit=1)
+        works = await get_filtered_works_async(filters={"id": formatted_id}, max_results=1)
 
         if not works:
             raise HTTPException(

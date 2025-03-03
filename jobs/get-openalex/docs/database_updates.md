@@ -29,7 +29,7 @@ The system is designed to run as a background process triggered via a REST API e
 
 1. A PostgreSQL database server
 2. The OpenAlex API service running
-3. Configure the `OPENALEX_POSTGRES_URL` environment variable with your PostgreSQL connection string
+3. Configure the `POSTGRES_URL` environment variable with your PostgreSQL connection string
 
 ### Configuration
 
@@ -37,7 +37,7 @@ Set up your PostgreSQL connection in the environment variables:
 
 ```bash
 # Example PostgreSQL connection string
-export OPENALEX_POSTGRES_URL="postgresql://username:password@hostname:5432/database"
+export POSTGRES_URL="postgresql://username:password@hostname:5432/database"
 ```
 
 You can also set these variables in your `.env` file or Docker configuration.
@@ -68,9 +68,9 @@ Choose a reasonable start date based on your needs. The farther back, the longer
 
 You can configure the update process using environment variables:
 
-- `OPENALEX_POSTGRES_URL`: PostgreSQL connection string (default: `postgresql://postgres:postgres@localhost:5432/openalex`)
-- `OPENALEX_UPDATE_BATCH_SIZE`: Number of records to process in a batch (default: 100)
-- `OPENALEX_UPDATE_MAX_RECORDS`: Maximum number of records to process per job (default: 10000)
+- `POSTGRES_URL`: PostgreSQL connection string (default: `postgresql://postgres:postgres@localhost:5432/openalex`)
+- `UPDATE_BATCH_SIZE`: Number of records to process in a batch (default: 100)
+- `UPDATE_MAX_RECORDS`: Maximum number of records to process per job (default: 10000)
 
 ## Daily Updates
 
@@ -189,7 +189,7 @@ curl "http://localhost:8000/jobs?job_type=WORKS_UPDATE"
 3. **Job seems stuck**
    - Check if it's still running (status = RUNNING)
    - Look for progress in job logs
-   - Consider setting a lower `OPENALEX_UPDATE_MAX_RECORDS` limit
+   - Consider setting a lower `UPDATE_MAX_RECORDS` limit
 
 ### Viewing Logs
 

@@ -1,13 +1,13 @@
 # get-openalex 📚🔍
 
 [![Version](https://img.shields.io/badge/version-0.1.0--dev1-blue.svg)](https://github.com/yourusername/get-openalex)
-[![Python](https://img.shields.io/badge/python-3.8%2B-brightgreen.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-brightgreen.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100.0%2B-ff69b4.svg)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115.11%2B-ff69b4.svg)](https://fastapi.tiangolo.com/)
 
 A powerful tool for accessing and processing [OpenAlex](https://openalex.org/) data through multiple interfaces.
 
-> 🔥 **NEW**: API server with optional PostgreSQL integration for storing fetched data!
+> 🔥 **NEW**: API server with PostgreSQL integration for storing fetched data!
 
 ## 🚀 Features
 
@@ -23,12 +23,8 @@ This tool provides three main ways to access OpenAlex data:
 # From the repository root after cloning
 pip install .
 
-# To include FastAPI dependencies (for API server)
-pip install ".[api]"
-
 # Or directly from a package repository (when published)
 pip install get-openalex
-pip install "get-openalex[api]"  # with API server support
 ```
 
 ## 🛠️ CLI Commands
@@ -137,9 +133,9 @@ The value of `onlyType` must be a single string, one of:
 - `Sources`
 - `Funders`
 
-### fromDate - FROM_DATE
+### fromDate - S3_FROM_DATE
 
-`--fromDate` or the environment variable `FROM_DATE` will specify the **first** day from when data will be downloaded.
+`--fromDate` or the environment variable `S3_FROM_DATE` will specify the **first** day from when data will be downloaded.
 If no date is specified and the value of environment variable `ALL_MONTH` is either not set or it is set to `False` or `0`, **all the data** will be downloaded.
 The date must follow ISO8601 format, for example: "2024-11-28"
 
@@ -282,7 +278,7 @@ s3_app.callback()(
 
 get-openalex includes a FastAPI server that provides a web API for querying OpenAlex data. This allows you to create a service that other applications can use to search and retrieve OpenAlex works.
 
-> ℹ️ **NOTE**: The API server can optionally store fetched data in a PostgreSQL database. This is an optional feature and is not required for basic functionality.
+> ℹ️ **NOTE**: The API server can store fetched data in a PostgreSQL database if configured.
 
 ### Running the API Server
 
@@ -290,13 +286,13 @@ To run the API server:
 
 ```shell
 # Using the CLI command (basic)
-get-openalex-api 
+get-openalex serve
 
 # With custom host and port
-get-openalex-api --host 0.0.0.0 --port 8000 
+get-openalex serve --host 0.0.0.0 --port 8000 
 
 # With auto-reload for development
-get-openalex-api --host 0.0.0.0 --port 8000 --reload
+get-openalex serve --host 0.0.0.0 --port 8000 --reload
 
 # Or directly with Python
 python -m polus.aithena.jobs.getopenalex.api.run --host 0.0.0.0 --port 8000
@@ -311,11 +307,11 @@ API_PORT=8000     # Port for the API server
 LOG_LEVEL=INFO    # Logging level (DEBUG, INFO, WARNING, ERROR)
 
 # Optional PostgreSQL connection (if you want to store fetched data)
-OPENALEX_POSTGRES_URL=postgresql://username:password@hostname:5432/database
+POSTGRES_URL=postgresql://username:password@hostname:5432/database
 
 # Update job settings (for PostgreSQL storage feature)
-OPENALEX_UPDATE_BATCH_SIZE=100    # Number of records per batch
-OPENALEX_UPDATE_MAX_RECORDS=10000 # Max records per job
+UPDATE_BATCH_SIZE=100    # Number of records per batch
+UPDATE_MAX_RECORDS=10000 # Max records per job
 
 # Job database path (for job tracking)
 JOB_DATABASE_URL=sqlite:///./openalex_jobs.db
@@ -387,15 +383,15 @@ docker run ${DOCKER_ORG}/get-openalex:${VERSION} s3 list-available --type Works
 
 ```shell
 # Basic API server
-docker run -p 8000:8000 ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex-api --host 0.0.0.0 --port 8000
+docker run -p 8000:8000 ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex serve --host 0.0.0.0 --port 8000
 
 # With volume for SQLite database persistence
-docker run -p 8000:8000 -v ${DATA_DIR}:/app/data ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex-api --host 0.0.0.0 --port 8000
+docker run -p 8000:8000 -v ${DATA_DIR}:/app/data ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex serve --host 0.0.0.0 --port 8000
 
 # With PostgreSQL integration (optional)
 docker run -p 8000:8000 \
-  -e OPENALEX_POSTGRES_URL=postgresql://username:password@hostname:5432/database \
-  ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex-api --host 0.0.0.0 --port 8000
+  -e POSTGRES_URL=postgresql://username:password@hostname:5432/database \
+  ${DOCKER_ORG}/get-openalex:${VERSION} get-openalex serve --host 0.0.0.0 --port 8000
 ```
 
 For more detailed Docker documentation, see [DOCKER.md](DOCKER.md)
@@ -429,3 +425,4 @@ For more detailed documentation, see the [docs](docs) directory:
 - [API Reference](docs/api_reference.md) - Detailed API endpoint documentation
 - [Database Updates](docs/database_updates.md) - Guide to using the PostgreSQL integration (optional)
 - [Technical Details](docs/technical_details.md) - Details about the database models and logging
+- [Environment Variables](docs/environment_variables.md) - Complete reference for all configuration options

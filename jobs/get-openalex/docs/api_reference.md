@@ -7,13 +7,14 @@ This document provides a comprehensive reference for the OpenAlex API endpoints.
   - [GET /works](#get-works)
   - [POST /works/search](#post-workssearch)
   - [GET /works/{work_id}](#get-workswork_id)
-- [Job Management Endpoints (For PostgreSQL Integration)
+- [Job Management Endpoints](#job-management-endpoints-for-postgresql-integration)
+(For PostgreSQL Integration)
   - [GET /jobs](#get-jobs)
   - [GET /jobs/{job_id}](#get-jobsjob_id)
   - [GET /jobs/{job_id}/logs](#get-jobsjob_idlogs)
-- [Database Update Endpoints](#database-update-endpoints) (For PostgreSQL Integration)
+- [Database Update Endpoints](#database-update-endpoints-for-postgresql-integration) (For PostgreSQL Integration)
   - [POST /update](#post-update)
-- [Utility Endpoints](#utility-endpoints)
+  - [Utility Endpoints](#utility-endpoints)
   - [GET /health](#get-health)
   - [GET /](#get-)
 
@@ -253,7 +254,7 @@ Starts a new database update job to fetch data from OpenAlex and store it in you
 
 #### Prerequisites
 
-- PostgreSQL must be configured via the `OPENALEX_POSTGRES_URL` environment variable
+- PostgreSQL must be configured via the `POSTGRES_URL` environment variable
 - The OpenAlex API service must be running
 
 #### Request Body
