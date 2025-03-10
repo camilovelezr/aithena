@@ -34,6 +34,8 @@ The diagram above shows how Aithena Services fits into a complete AI stack, prov
 - **Memory API**: Clean, well-documented API for storing and retrieving vector embeddings
 - **Docker Ready**: Deploy as a standalone service or as part of a complete stack
 - **Optimized Performance**: Efficient cosine similarity search for finding relevant content
+- **CLI Interface**: Simple command-line tool to start and manage the API server
+- **Environment Control**: Flexible configuration through environment variables and .env files
 
 ## 🤔 Why Choose Aithena Services?
 
@@ -80,6 +82,45 @@ While you can run Aithena Services as a standalone memory component, the full st
 
 ## 🔍 Quick Usage Examples
 
+### Start the API Server
+
+After installation, you can quickly start the API server using the built-in CLI:
+
+```bash
+# Basic usage with default settings (host: 0.0.0.0, port: 8000)
+aithena-services serve
+
+# Enable auto-reload for development (automatically reloads on code changes)
+aithena-services serve --reload
+
+# Customize host and port
+aithena-services serve --host 127.0.0.1 --port 8080
+
+# Set custom log level
+aithena-services serve --log-level DEBUG
+
+# Specify a custom .env file location
+aithena-services serve --env-file /path/to/your/.env
+
+# View all available options
+aithena-services serve --help
+```
+
+### Environment Configuration
+
+Aithena Services automatically looks for a `.env` file in your current working directory or parent directories. You can create a `.env` file with settings like:
+
+```
+# Database connection
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5433
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=your_database
+```
+
+If you want to explicitly specify a different `.env` file location, use the `--env-file` flag when starting the server.
+
 ### Store Vector Embeddings
 
 ```bash
@@ -115,6 +156,7 @@ Comprehensive documentation is available to help you get started:
 - [Memory Features](docs/memory.md)
 - [Environment Variables](docs/env.md)
 - [Project Structure](docs/structure.md)
+- [CLI Usage](docs/cli.md)
 
 ## 🔌 Integration with LiteLLM
 

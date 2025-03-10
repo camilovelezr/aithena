@@ -1,27 +1,27 @@
 import os
+from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 from polus.aithena.common.logger import get_logger
 
-load_dotenv(find_dotenv(), override=True)
+logger = get_logger(__file__)
 
-env = os.environ
+load_dotenv(find_dotenv(), override=True)
+logger.info(f"Loaded environment variables from {find_dotenv()}")
 
 
 # ----Memory----
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "postgres")
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.environ.get("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "postgres")
 
-
-logger = get_logger(__file__)
 
 logger.info(
     f"""
 Aithena-Services started with 
-POSTGRES_HOST: {POSTGRES_HOST}, POSTGRES_PORT: {POSTGRES_PORT}, POSTGRES_USER: {POSTGRES_USER}, POSTGRES_PASSWORD: {POSTGRES_PASSWORD},
+POSTGRES_HOST: {POSTGRES_HOST}, POSTGRES_PORT: {POSTGRES_PORT}, POSTGRES_USER: {POSTGRES_USER}, POSTGRES_PASSWORD: {"*" * len(POSTGRES_PASSWORD)},
 POSTGRES_DB: {POSTGRES_DB}
 """
 )
