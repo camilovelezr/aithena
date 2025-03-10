@@ -12,6 +12,7 @@ fastapi = {extras = ["standard"], version = ">=0.112.0"}
 polus-aithena-common = {path= "../../common", develop=true}
 psycopg = {extras = ["binary"], version = "^3.2.3"}
 openalex-types = {git="https://github.com/camilovelezr/openalex-types.git"}
+uvicorn = {extras = ["standard"], version = "^0.27.1"}
 
 
 
@@ -26,6 +27,9 @@ bump2version = "^1.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+aithena-services = "aithena_services.cli.main:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

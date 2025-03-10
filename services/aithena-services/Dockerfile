@@ -23,5 +23,7 @@ RUN pip3 install "${EXEC_DIR}/aithena/services/aithena-services"
 # Expose the application port
 EXPOSE 8000
 
-# Run the application
-CMD ["bash", "-c", "uvicorn aithena_services.api.main:app --host 0.0.0.0 --port 8000"]
+# Run the application using the CLI
+# Environment variables can be passed via docker run -e or docker-compose environment:
+# Example: docker run -e POSTGRES_HOST=my-db-host -e POSTGRES_PORT=5433 ...
+CMD ["aithena-services", "serve", "--host", "0.0.0.0", "--port", "8000"]
