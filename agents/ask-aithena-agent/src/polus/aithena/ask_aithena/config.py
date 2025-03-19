@@ -58,7 +58,7 @@ CHAT_MODEL_PARAMS = {
 }
 CHAT_MODEL_PARAMS = {k: v for k, v in CHAT_MODEL_PARAMS.items() if v is not None}
 SEMANTICS_MODEL = os.environ.get("SEMANTICS_MODEL", default="llama3.2")
-SEMANTICS_TEMPERATURE = float(os.environ.get("SEMANTICS_TEMPERATURE", default=0.3))
+SEMANTICS_TEMPERATURE = float(os.environ.get("SEMANTICS_TEMPERATURE", default=0.2))
 RERANK_MODEL = os.environ.get("RERANK_MODEL", default="azure-gpt-4o")
 RERANK_TEMPERATURE = float(os.environ.get("RERANK_TEMPERATURE", default=0.3))
 RERANK_TOP_K = int(os.environ.get("RERANK_TOP_K", default=10))

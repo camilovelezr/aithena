@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field, UUID4
 import datetime
+from faststream.rabbit import RabbitExchange, RabbitQueue, ExchangeType
 
 STAGES = {
     "owl": [
@@ -24,6 +25,17 @@ STAGES = {
         "preparing_response",
     ],
 }
+
+ask_aithena_exchange = RabbitExchange(
+    "ask-aithena-exchange",
+    ExchangeType.TOPIC,
+    durable=True,
+)
+
+ask_aithena_queue = RabbitQueue(
+    "ask-aithena-queue",
+    routing_key="session.{session_id}",
+)
 
 
 class ProcessingStatus(BaseModel):

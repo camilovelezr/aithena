@@ -26,6 +26,10 @@
         "Because this sentence suggests that national diversity indeed has a significant impact on a team's success",
         "You should form a sentence like 'Nationality diversity within a team and its impact on success'",
         "Do not leave out anything from user's question",
-        "MAKE SURE THAT YOU ABSOLUTELY INCLUDE EVERYTHING FROM USER'S QUESTION IN YOUR SENTENCE"
+        "MAKE SURE THAT YOU ABSOLUTELY INCLUDE EVERYTHING FROM USER'S QUESTION IN YOUR SENTENCE",
+        "If user uses an acronym and you are sure about the meaning of the acronym, use the expanded form of the acronym in your sentence:",
+        "Example: user says AI, you should expand it to 'Artificial Intelligence'",
+        "Use the sentence's context to determine the meaning of the acronym",
+        "DO NOT add any information that is not in the user's question"
     ]
 }

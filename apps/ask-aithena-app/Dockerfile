@@ -1,28 +1,48 @@
-FROM python:3.11-slim
+FROM node:18-alpine AS base
 
-# environment variables
-ENV AITHENA_LOG_LEVEL="DEBUG"
-ENV EXEC_DIR="/opt/executables"
-# Work directory defined in the base container
-WORKDIR ${EXEC_DIR}
+# Install dependencies only when needed
+FROM base AS deps
+WORKDIR /app
 
-# TOOL_DIR Argument to the Dockerfile
-ARG TOOL_DIR="."
+# Copy package.json and install dependencies
+COPY package.json ./
+RUN npm install
 
-# Copy the repository into the container
-RUN mkdir aithena
-COPY $TOOL_DIR ${EXEC_DIR}/aithena/${TOOL_DIR}
-COPY common ${EXEC_DIR}/aithena/common
-COPY . /ask_aithena_dashboard
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
-# Install the tool
-RUN pip3 install "${EXEC_DIR}/aithena/${TOOL_DIR}"
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line to disable telemetry during the build.
+ENV NEXT_TELEMETRY_DISABLED 1
 
-EXPOSE 8765
+# Build the Next.js application
+RUN npm run build
 
-# if using with nginx, change the root-path to the nginx endpoint:
-# change --rooth-path /{endpoint} to the nginx endpoint
-# e.g. --root-path /askaithena
-# if not using nginx, remove the --root-path argument
-# e.g. CMD ["solara", "run", "aithena/apps/ask-aithena-app/src/polus/aithena/ask_aithena_app/dashboard.py", "--host=0.0.0.0", "--production"]
-CMD ["solara", "run", "aithena/apps/ask-aithena-app/src/polus/aithena/ask_aithena_app/dashboard.py", "--host=0.0.0.0", "--production", "--root-path", "/askaithena"]
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+
+CMD ["node", "server.js"]
