@@ -203,3 +203,9 @@ cython_debug/
 
 #husky
 node_modules
+
+# vscode
+*.code-workspace
+
+# dbs
+*.db

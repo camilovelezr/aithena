@@ -40,7 +40,7 @@ def serve_command(args: argparse.Namespace) -> None:
 
     logger.info(f"Starting aithena-services API server on {args.host}:{args.port}")
     uvicorn.run(
-        "aithena_services.api.main:app",
+        "aithena_services.api.app:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
