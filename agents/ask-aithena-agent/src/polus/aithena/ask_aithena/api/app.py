@@ -5,6 +5,7 @@ import os
 import sys
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from faststream.rabbit.fastapi import RabbitRouter
 from faststream.rabbit import RabbitExchange, RabbitQueue, ExchangeType
@@ -21,6 +22,7 @@ from polus.aithena.ask_aithena.agents.responder import responder_agent
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.agents.reranker.one_step_reranker import rerank_context
 from polus.aithena.ask_aithena.agents.reranker.aegis import aegis_rerank_context
+from polus.aithena.ask_aithena.rabbit import ask_aithena_exchange, ask_aithena_queue
 
 # from pydantic import BaseModel, Field
 import logfire
@@ -46,17 +48,6 @@ logging.getLogger("uvicorn").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 rabbit_router = RabbitRouter("amqp://guest:guest@localhost:5672/")
-
-ask_aithena_exchange = RabbitExchange(
-    "ask-aithena-exchange",
-    ExchangeType.TOPIC,
-    durable=True,
-)
-
-ask_aithena_queue = RabbitQueue(
-    "ask-aithena-queue",
-    routing_key="session.{session_id}",
-)
 
 
 def broker():
@@ -87,6 +78,16 @@ def create_application() -> FastAPI:
         version="1.0.0",
         on_startup=[_declare_exchanges_and_queues],
     )
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allows all origins
+        allow_credentials=True,
+        allow_methods=["*"],  # Allows all methods
+        allow_headers=["*"],  # Allows all headers
+    )
+
     # Include routers
     app.include_router(test_router)
 
@@ -101,12 +102,12 @@ def create_application() -> FastAPI:
     async def detailed_health_check():
         """Detailed health check endpoint that verifies litellm connectivity."""
         health_info = {"status": "ok", "api": "running", "litellm": "unknown"}
-        await rabbit_router.broker.publish(
-            "THIS IS A TEST",
-            exchange=ask_aithena_exchange,
-            queue=ask_aithena_queue,
-            routing_key="session.123",
-        )
+        # await rabbit_router.broker.publish(
+        #     "THIS IS A TEST",
+        #     exchange=ask_aithena_exchange,
+        #     queue=ask_aithena_queue,
+        #     routing_key="session.123",
+        # )
 
         try:
             # Test litellm connection
@@ -145,13 +146,13 @@ async def owl_ask(request: AskRequest):
     logger.info(f"Received Owl ask request: {request.query}")
     logfire.info("Received Owl ask request", query=request.query)
     # Semantic Analysis and Context Retrieval
-    await rabbit_router.broker.publish(
-        "retrieve_context",
-        exchange=ask_aithena_exchange,
-        queue=ask_aithena_queue,
-        routing_key="session.123",
-    )
-    context_ = await retrieve_context(request.query)
+    # await rabbit_router.broker.publish(
+    #     "retrieve_context",
+    #     exchange=ask_aithena_exchange,
+    #     queue=ask_aithena_queue,
+    #     routing_key="session.123",
+    # )
+    context_ = await retrieve_context(request.query, rabbit_router.broker)
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context retrieved", context=context_.model_dump())
     await rabbit_router.broker.publish(
@@ -168,6 +169,12 @@ async def owl_ask(request: AskRequest):
             <context>{context.to_llm_context()}</context>
             """
         ) as response:
+            await rabbit_router.broker.publish(
+                "responding",
+                exchange=ask_aithena_exchange,
+                queue=ask_aithena_queue,
+                routing_key="session.123",
+            )
             async for message in response.stream_text(delta=True):
                 yield message
             yield "\n\n\n"
@@ -185,18 +192,18 @@ async def shield_ask(request: AskRequest):
     logger.info(f"Received Shield ask request: {request.query}")
     logfire.info("Received Shield ask request", query=request.query)
     # Semantic Analysis and Context Retrieval
-    await rabbit_router.broker.publish(
-        "retrieve_context",
-        exchange=ask_aithena_exchange,
-        queue=ask_aithena_queue,
-        routing_key="session.123",
-    )
-    context_norank = await retrieve_context(request.query)
+    # await rabbit_router.broker.publish(
+    #     "retrieve_context",
+    #     exchange=ask_aithena_exchange,
+    #     queue=ask_aithena_queue,
+    #     routing_key="session.123",
+    # )
+    context_norank = await retrieve_context(request.query, rabbit_router.broker)
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context")
     await rabbit_router.broker.publish(
-        "rerank_context",
+        "rerank_context_one_step",
         exchange=ask_aithena_exchange,
         queue=ask_aithena_queue,
         routing_key="session.123",
@@ -218,6 +225,12 @@ async def shield_ask(request: AskRequest):
             <context>{context.to_llm_context()}</context>
             """
         ) as response:
+            await rabbit_router.broker.publish(
+                "responding",
+                exchange=ask_aithena_exchange,
+                queue=ask_aithena_queue,
+                routing_key="session.123",
+            )
             async for message in response.stream_text(delta=True):
                 yield message
             yield "\n\n\n"
@@ -235,13 +248,13 @@ async def aegis_ask(request: AskRequest):
     logger.info(f"Received Aegis ask request: {request.query}")
     logfire.info("Received Aegis ask request", query=request.query)
     # Semantic Analysis and Context Retrieval
-    await rabbit_router.broker.publish(
-        "retrieve_context",
-        exchange=ask_aithena_exchange,
-        queue=ask_aithena_queue,
-        routing_key="session.123",
-    )
-    context_norank = await retrieve_context(request.query)
+    # await rabbit_router.broker.publish(
+    #     "retrieve_context",
+    #     exchange=ask_aithena_exchange,
+    #     queue=ask_aithena_queue,
+    #     routing_key="session.123",
+    # )
+    context_norank = await retrieve_context(request.query, rabbit_router.broker)
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context very carefully")
@@ -268,6 +281,12 @@ async def aegis_ask(request: AskRequest):
             <context>{context.to_llm_context()}</context>
             """
         ) as response:
+            await rabbit_router.broker.publish(
+                "responding",
+                exchange=ask_aithena_exchange,
+                queue=ask_aithena_queue,
+                routing_key="session.123",
+            )
             async for message in response.stream_text(delta=True):
                 yield message
             yield "\n\n\n"

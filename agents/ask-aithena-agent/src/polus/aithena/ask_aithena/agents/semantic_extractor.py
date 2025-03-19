@@ -20,14 +20,13 @@ from polus.aithena.ask_aithena.config import (
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai import Agent
+from pydantic_ai.settings import ModelSettings
 from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
 import openai
 from polus.aithena.common.logger import get_logger
 import logfire
-import datetime
 from faststream.rabbit import RabbitBroker
-
-from polus.aithena.ask_aithena.rabbit import ProcessingStatus
+from polus.aithena.ask_aithena.rabbit import ask_aithena_exchange, ask_aithena_queue
 
 
 logfire.configure()
@@ -76,7 +75,6 @@ extract_semantic_agent = BaseAgent(
             openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
         ),
         model=SEMANTICS_MODEL,
-        temperature=SEMANTICS_TEMPERATURE,
         system_prompt_generator=SystemPromptGenerator(
             background=EXTRACT_SEMANTICS_AGENT_PROMPT["background"],
             steps=EXTRACT_SEMANTICS_AGENT_PROMPT["steps"],
@@ -84,6 +82,7 @@ extract_semantic_agent = BaseAgent(
         ),
         input_schema=ExtractSemanticAgentInput,
         output_schema=ExtractSemanticAgentOutput,
+        model_api_parameters={"temperature": SEMANTICS_TEMPERATURE},
     )
 )
 
@@ -100,6 +99,9 @@ semantic_agent = Agent(
     system_prompt=MAIN_AGENT_PROMPT,
     result_type=SemanticAgentOutput,
     instrument=True,
+    model_settings=ModelSettings(
+        temperature=SEMANTICS_TEMPERATURE,
+    ),
 )
 
 
@@ -132,15 +134,15 @@ async def run_semantic_agent(
     """
     if broker is not None:
         await broker.publish(
-            ProcessingStatus(
-                query_id=session_id,
-                stage="analyzing_query",
-            ).model_dump_json(),
+            "analyzing_query",
+            exchange=ask_aithena_exchange,
+            queue=ask_aithena_queue,
+            routing_key="session.123",
         )
 
     res = await semantic_agent.run(f"Q: {query}")
 
-    return res.data
+    return res
 
 
 # query_test = "What is the effect of national diversity on a team's success?"

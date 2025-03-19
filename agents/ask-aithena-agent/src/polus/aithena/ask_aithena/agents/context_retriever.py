@@ -3,13 +3,15 @@ This agent is used to retrieve the works that are most relevant to the query.
 It uses the semantic agent to get the main topic of the query and then uses the vector search tool to get the works that are most relevant to the query.
 """
 
-from polus.aithena.ask_aithena.agents.semantic_extractor import semantic_agent
+from polus.aithena.ask_aithena.agents.semantic_extractor import run_semantic_agent
 from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.tools.vector_search import (
     get_similar_works_async,
     get_similar_works,
 )
+from faststream.rabbit.broker import RabbitBroker
+from typing import Optional
 import logfire
 
 logfire.configure()
@@ -35,13 +37,15 @@ def retrieve_context_sync(query: str) -> Context:
         return context
 
 
-async def retrieve_context(query: str) -> Context:
+async def retrieve_context(
+    query: str, broker: Optional[RabbitBroker] = None
+) -> Context:
     with logfire.span("context_retriever workflow"):
         logger.info(f"Running context retriever with query: {query}")
         logger.info("Running semantic extracter")
-        semantics = await semantic_agent.run(f"Q: {query}")
+        semantics = await run_semantic_agent(query, broker)
         logger.info("Running vector search")
-        works = await get_similar_works_async(semantics.data.sentence)
+        works = await get_similar_works_async(semantics.data.sentence, broker)
         logger.info("Creating context")
         context = Context.from_works(works)
         return context

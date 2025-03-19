@@ -2,6 +2,7 @@ from functools import cached_property
 from typing import Optional, Dict, Any, List
 from pydantic import Field
 from pydantic import BaseModel
+import json
 
 
 class Document(BaseModel):
@@ -28,21 +29,16 @@ class Document(BaseModel):
         context_string += "</doc>\n"
         return context_string
 
-    def to_reference(self) -> str:
-        """Convert document to reference string format."""
-        title = self.title
-        authors = self.authors
-        year = self.year
-        doi = self.doi
-
-        authors_str = ", ".join(authors) if len(authors) > 0 else "Unknown"
-        ref = f"{authors_str}, {title}"
-        if year:
-            ref += f" ({year})"
-        if doi:
-            ref += f" <br/> DOI: {doi}"
-        ref += f" <br/> ID: {self.id} <br/>\n\n"
-        return ref
+    def to_reference(self, score: Optional[float] = None) -> Dict[str, Any]:
+        """Convert document to reference dictionary format for frontend rendering."""
+        return {
+            "title": self.title,
+            "authors": self.authors,
+            "year": self.year,
+            "doi": self.doi,
+            "id": self.id,
+            "score": score if score is not None else None,
+        }
 
     @classmethod
     def from_work(cls, work: dict) -> "Document":
@@ -99,10 +95,22 @@ class Context(BaseModel):
         return f"<context>\n{docs}\n</context>"
 
     def to_references(self) -> str:
-        """Convert documents to a reference list."""
-        return "\n".join(
-            [f"({i+1}) {doc.to_reference()}" for i, doc in enumerate(self._documents())]
-        )
+        """Convert documents to a JSON reference list for the frontend."""
+        references = []
+        for i, doc in enumerate(self._documents()):
+            ref_data = doc.to_reference(
+                score=(
+                    self.reranked_scores[i]
+                    if self.reranked_scores is not None
+                    else None
+                )
+            )
+            # Add the index (1-based) to each reference
+            ref_data["index"] = i + 1
+            references.append(ref_data)
+
+        # Return a JSON string that the frontend can parse
+        return json.dumps(references)
 
     def to_works_for_reranker(self) -> str:
         """Convert context to works for reranker string."""
