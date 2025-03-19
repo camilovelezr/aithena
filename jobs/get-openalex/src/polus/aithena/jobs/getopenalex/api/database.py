@@ -9,8 +9,9 @@ from enum import Enum
 import os
 from typing import Optional, List, Dict, Any, Union
 from uuid import uuid4
+from datetime import timezone
 
-from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select
+from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select, delete
 from sqlalchemy import JSON
 
 from polus.aithena.common.logger import get_logger
@@ -142,19 +143,16 @@ class JobRepository:
         self.db = db
 
     def create_job(self, job_type: JobType, parameters: Dict[str, Any] = None) -> Job:
-        """Create a new job record."""
+        """Create a new job."""
         with self.db.get_session() as session:
             job = Job(
                 job_type=job_type,
-                status=JobStatus.PENDING,
                 parameters=parameters or {},
+                status=JobStatus.PENDING,
             )
             session.add(job)
             session.commit()
             session.refresh(job)
-            logger.info(
-                f"Created new job", extra={"job_id": job.id, "job_type": job_type}
-            )
             return job
 
     def get_job(self, job_id: int) -> Optional[Job]:
@@ -162,19 +160,37 @@ class JobRepository:
         with self.db.get_session() as session:
             return session.get(Job, job_id)
 
+    def delete_all_jobs(self) -> int:
+        """Delete all jobs and their logs from the database.
+        
+        Returns:
+            The number of deleted jobs
+        """
+        with self.db.get_session() as session:
+            # First delete all logs as they reference jobs
+            session.exec(delete(JobLog))
+            
+            # Then delete all jobs
+            deleted_count = session.exec(delete(Job)).rowcount
+            session.commit()
+            
+            logger.info(f"Deleted all {deleted_count} jobs and their logs from the database")
+            return deleted_count
+
     def start_job(self, job_id: int) -> Optional[Job]:
         """Mark a job as started."""
         with self.db.get_session() as session:
             job = session.get(Job, job_id)
             if job:
                 job.status = JobStatus.RUNNING
-                job.started_at = datetime.utcnow()
+                job.started_at = datetime.now(timezone.utc)
                 session.add(job)
                 session.commit()
                 session.refresh(job)
                 logger.info(
                     f"Started job", extra={"job_id": job.id, "job_type": job.job_type}
                 )
+                logger.info(job)
             return job
 
     def complete_job(
@@ -269,12 +285,54 @@ class JobRepository:
             ).all()
 
     def get_last_successful_job(self, job_type: JobType) -> Optional[Job]:
-        """Get the last successful job of a specific type."""
+        """Get the last successful job of the given type."""
         with self.db.get_session() as session:
-            jobs = session.exec(
+            query = (
                 select(Job)
-                .where(Job.job_type == job_type, Job.status == JobStatus.COMPLETED)
+                .where(
+                    Job.job_type == job_type,
+                    Job.status == JobStatus.COMPLETED,
+                )
                 .order_by(Job.completed_at.desc())
-                .limit(1)
-            ).all()
-            return jobs[0] if jobs else None
+            )
+            result = session.exec(query).first()
+            return result
+
+    def abort_all_running_jobs(self) -> int:
+        """Abort all jobs that are currently running.
+        
+        Updates the status of all RUNNING jobs to ABORTED.
+        
+        Returns:
+            The number of jobs that were aborted
+        """
+        with self.db.get_session() as session:
+            # Find all running jobs
+            query = select(Job).where(Job.status == JobStatus.RUNNING)
+            running_jobs = session.exec(query).all()
+            
+            # If there are no running jobs, return early
+            if not running_jobs:
+                logger.info("No running jobs found to abort")
+                return 0
+            
+            # Update each job's status to ABORTED
+            aborted_count = 0
+            for job in running_jobs:
+                job.status = JobStatus.ABORTED
+                job.completed_at = datetime.utcnow()
+                job.error_message = "Job aborted by user request"
+                
+                # Add a log entry
+                log = JobLog(
+                    job_id=job.id,
+                    level="WARNING",
+                    message="Job aborted by user request",
+                    details={"aborted_at": datetime.utcnow().isoformat()}
+                )
+                session.add(log)
+                aborted_count += 1
+            
+            session.commit()
+            logger.info(f"Aborted {aborted_count} running jobs")
+            return aborted_count

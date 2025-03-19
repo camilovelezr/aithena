@@ -408,18 +408,60 @@ async def get_job_logs(job_id: int):
     ]
 
 
+@app.delete("/jobs", response_model=dict)
+async def delete_all_jobs():
+    """Delete all jobs and their logs from the database."""
+    try:
+        deleted_count = job_repo.delete_all_jobs()
+        return {
+            "message": f"Successfully deleted all jobs",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        logger.exception(f"Error deleting jobs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting jobs: {str(e)}")
+
+
+@app.post("/jobs/abort-all", response_model=dict)
+async def abort_all_running_jobs():
+    """Abort all currently running jobs."""
+    try:
+        aborted_count = job_repo.abort_all_running_jobs()
+        return {
+            "message": f"Successfully aborted running jobs",
+            "aborted_count": aborted_count
+        }
+    except Exception as e:
+        logger.exception(f"Error aborting jobs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error aborting jobs: {str(e)}")
+
+
 # Update job endpoints
 def run_update_job_background(
-    job_type: str, from_date: Optional[str] = None, max_records: Optional[int] = None
+    job_type: str, from_date: Optional[str] = None, max_records: Optional[int] = None, job_id: Optional[int] = None
 ):
     """Run an update job in the background."""
     try:
         if job_type.upper() == JobType.WORKS_UPDATE.value:
-            run_works_update(from_date=from_date, max_records=max_records)
+            run_works_update(from_date=from_date, max_records=max_records, job_id=job_id)
         else:
             logger.error(f"Unsupported job type: {job_type}")
+            # Update job status to FAILED for unsupported job type
+            if job_id:
+                job_repo.complete_job(
+                    job_id=job_id,
+                    status=JobStatus.FAILED,
+                    error_message=f"Unsupported job type: {job_type}"
+                )
     except Exception as e:
         logger.exception(f"Error running update job: {str(e)}")
+        # Update job status to FAILED when an exception occurs
+        if job_id:
+            job_repo.complete_job(
+                job_id=job_id,
+                status=JobStatus.FAILED,
+                error_message=str(e)
+            )
 
 
 @app.post("/update", response_model=Job)
@@ -459,6 +501,7 @@ async def start_update_job(
             job_type=job_type_enum.value,
             from_date=update_request.from_date,
             max_records=update_request.max_records,
+            job_id=job.id,
         )
 
         return Job.from_db_job(job)

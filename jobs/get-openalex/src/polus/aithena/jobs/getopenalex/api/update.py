@@ -6,11 +6,16 @@ data from the OpenAlex API. It includes incremental updates based on modificatio
 
 from datetime import datetime, timedelta
 import os
+import json
 from typing import Dict, Optional, Any, Iterator
 
+from openalex_types import Work
 from sqlmodel import Session, SQLModel, create_engine, select, col, Field
 from pydantic import BaseModel
 from sqlalchemy import JSON
+from sqlalchemy.sql import text
+import psycopg
+from psycopg.types.json import Json
 
 from polus.aithena.jobs.getopenalex import iter_filtered_works_cursor
 from polus.aithena.jobs.getopenalex.api.logging import JobLogger
@@ -21,11 +26,12 @@ from polus.aithena.jobs.getopenalex.api.database import (
     JobStatus,
     Job,
 )
-from polus.aithena.jobs.getopenalex.config import POSTGRES_URL, UPDATE_BATCH_SIZE, UPDATE_MAX_RECORDS
+from polus.aithena.jobs.getopenalex.config import DB_CONFIG_STRING, UPDATE_BATCH_SIZE, UPDATE_MAX_RECORDS
+from polus.aithena.jobs.getopenalex.rest.get_works import pyalex_to_model
+from polus.aithena.common.logger import get_logger
 
-
-# Default PostgreSQL connection string - should be overridden by environment variables
-DEFAULT_POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/openalex"
+# Set up logger
+logger = get_logger(__name__)
 
 # Default values
 DEFAULT_BATCH_SIZE = 100
@@ -58,16 +64,19 @@ class OpenAlexDBUpdater:
 
     def __init__(
         self,
-        postgres_url: str = None,
+        postgres_url: str = None,  # Kept for backward compatibility
         job_db: Database = None,
         batch_size: int = None,
         max_records: int = None,
     ):
-        # PostgreSQL connection
-        self.postgres_url = postgres_url or POSTGRES_URL or DEFAULT_POSTGRES_URL
-        self.pg_engine = create_engine(self.postgres_url, echo=False)
-
-        # Job database
+        # Log the configuration at startup
+        logger.info(f"Initializing OpenAlexDBUpdater with DB_CONFIG_STRING: {DB_CONFIG_STRING}")
+        
+        # PostgreSQL connection - we no longer need to parse URLs, 
+        # as we'll use DB_CONFIG_STRING directly
+        self.db_config_string = DB_CONFIG_STRING
+        
+        # Job database - keep SQLAlchemy here since it could be SQLite
         self.job_db = job_db or Database()
         self.job_repo = JobRepository(self.job_db)
 
@@ -80,24 +89,92 @@ class OpenAlexDBUpdater:
 
     def _ensure_tables(self):
         """Ensure required tables exist in both databases."""
-        # Job database tables
+        # Job database tables - keep SQLAlchemy for this
         self.job_db.create_tables()
 
-        # PostgreSQL tables - create if they don't exist
-        # Define models for the PostgreSQL database tables
-        class Work(SQLModel, table=True):
-            __tablename__ = "openalex_works"
+        # Print directly to ensure visibility
+        print(f"DEBUG: Attempting to connect to PostgreSQL with connection string: {self.db_config_string}")
+        logger.info(f"Ensuring PostgreSQL tables exist using: {self.db_config_string}")
 
-            id: str = Field(primary_key=True)
-            title: str
-            publication_date: Optional[str] = Field(default=None, index=True)
-            doi: Optional[str] = Field(default=None, index=True)
-            updated_date: Optional[str] = Field(default=None, index=True)
-            data: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
-            last_updated: datetime = Field(default_factory=datetime.now)
-
-        # Create tables if they don't exist
-        SQLModel.metadata.create_all(self.pg_engine)
+        try:
+            # Try with localhost IP address if hostname doesn't work
+            connection_string = self.db_config_string
+            
+            # First attempt - with the original connection string
+            print(f"DEBUG: First connection attempt with: {connection_string}")
+            try:
+                # PostgreSQL tables
+                with psycopg.connect(connection_string) as conn:
+                    print("DEBUG: Successfully connected to PostgreSQL")
+                    logger.info("Successfully connected to PostgreSQL")
+                    
+                    with conn.cursor() as cur:
+                        # Check if the openalex.works table exists in the openalex schema (not public)
+                        print("DEBUG: Checking if openalex.works table exists")
+                        cur.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_schema = 'openalex' 
+                            AND table_name = 'works'
+                        )
+                        """)
+                        table_exists = cur.fetchone()[0]
+                        
+                        print(f"DEBUG: openalex.works table exists: {table_exists}")
+                        logger.info(f"openalex.works table exists: {table_exists}")
+                        
+                        if not table_exists:
+                            raise ValueError("openalex.works table does not exist")
+            except psycopg.OperationalError as e:
+                # If the original connection string fails, try with 127.0.0.1 instead of localhost
+                if "localhost" in connection_string:
+                    fallback_string = connection_string.replace("host=localhost", "host=127.0.0.1")
+                    print(f"DEBUG: First connection attempt failed. Trying with 127.0.0.1 instead: {fallback_string}")
+                    
+                    with psycopg.connect(fallback_string) as conn:
+                        print("DEBUG: Successfully connected to PostgreSQL using 127.0.0.1")
+                        logger.info("Successfully connected to PostgreSQL using 127.0.0.1")
+                        
+                        # Save the working connection string for future use
+                        self.db_config_string = fallback_string
+                        
+                        with conn.cursor() as cur:
+                            # Check if the openalex.works table exists
+                            print("DEBUG: Checking if openalex.works table exists")
+                            cur.execute("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_schema = 'openalex' 
+                                AND table_name = 'works'
+                            )
+                            """)
+                            table_exists = cur.fetchone()[0]
+                            
+                            print(f"DEBUG: openalex.works table exists: {table_exists}")
+                            logger.info(f"openalex.works table exists: {table_exists}")
+                            
+                            if not table_exists:
+                                raise ValueError("openalex.works table does not exist")
+                else:
+                    # If we're not using localhost or the fallback also failed, re-raise
+                    raise
+        except Exception as e:
+            error_msg = f"Failed to connect to PostgreSQL: {e}"
+            print(f"ERROR: {error_msg}")
+            logger.error(error_msg)
+            
+            # Print network diagnostic information
+            import socket
+            try:
+                hostname = self.db_config_string.split("host=")[1].split(" ")[0]
+                print(f"DEBUG: Attempting to resolve hostname: {hostname}")
+                ip = socket.gethostbyname(hostname)
+                print(f"DEBUG: Resolved {hostname} to {ip}")
+            except Exception as e:
+                print(f"DEBUG: Could not resolve hostname: {e}")
+            
+            # Re-raise the exception after logging it
+            raise
 
     def _get_last_update_date(self) -> Optional[str]:
         """Get the last update date from the job history."""
@@ -137,12 +214,12 @@ class OpenAlexDBUpdater:
             )
 
         # Logger
-        logger = JobLogger(f"works_update_{job.id}")
+        job_logger = JobLogger(f"works_update_{job.id}")
 
         try:
             # Start job
             job = self.job_repo.start_job(job.id)
-            logger.start_job(from_date=from_date)
+            job_logger.start_job(from_date=from_date)
 
             # Setup counters
             processed = 0
@@ -151,11 +228,11 @@ class OpenAlexDBUpdater:
             failed = 0
 
             # Iterate through works
-            logger.info(f"Starting works update from {from_date}", from_date=from_date)
+            job_logger.info(f"Starting works update from {from_date}", from_date=from_date)
 
             # Use cursor-based pagination to iterate through all matching works
             # This is more efficient for large result sets
-            for work in self._iterate_works(from_date=from_date, logger=logger):
+            for work in self._iterate_works(from_date=from_date, logger=job_logger):
                 try:
                     result = self._process_work(work)
                     processed += 1
@@ -167,7 +244,7 @@ class OpenAlexDBUpdater:
 
                     # Log progress periodically
                     if processed % 100 == 0:
-                        logger.progress(
+                        job_logger.progress(
                             current=processed,
                             created=created,
                             updated=updated,
@@ -176,18 +253,19 @@ class OpenAlexDBUpdater:
 
                     # Check if we've reached the maximum
                     if processed >= self.max_records:
-                        logger.info(
+                        job_logger.info(
                             f"Reached maximum records limit ({self.max_records})"
                         )
                         break
 
                 except Exception as e:
                     failed += 1
-                    logger.error(f"Error processing work: {str(e)}", work_id=work.id)
+                    # Use dictionary access instead of attribute access since work is now a dict
+                    job_logger.error(f"Error processing work: {str(e)}", work_id=work.get("id", "unknown"))
 
             # Complete job
             status = JobStatus.COMPLETED
-            logger.info(
+            job_logger.info(
                 f"Works update completed: {processed} processed, {created} created, {updated} updated, {failed} failed",
                 processed=processed,
                 created=created,
@@ -199,7 +277,7 @@ class OpenAlexDBUpdater:
             # Handle job failure
             status = JobStatus.FAILED
             error_message = str(e)
-            logger.error(f"Works update failed: {error_message}")
+            job_logger.error(f"Works update failed: {error_message}")
 
             # Complete the job with failure status
             return self.job_repo.complete_job(
@@ -213,7 +291,7 @@ class OpenAlexDBUpdater:
             )
 
         # Complete the job with success status
-        logger.end_job(status="success")
+        job_logger.end_job(status="success")
         return self.job_repo.complete_job(
             job_id=job.id,
             status=status,
@@ -225,7 +303,7 @@ class OpenAlexDBUpdater:
 
     def _iterate_works(
         self, from_date: str, logger: JobLogger
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[Work]:
         """Iterate through works from OpenAlex API.
 
         Args:
@@ -237,89 +315,77 @@ class OpenAlexDBUpdater:
         """
         # Define filters
         filters = {
-            "from_updated_date": from_date,
+            "from_publication_date": from_date,
         }
 
         logger.info("Starting iteration through works", filters=filters)
 
         # Use cursor-based pagination for efficiency
         for i, work in enumerate(iter_filtered_works_cursor(filters=filters)):
-            # Convert to dict for processing
-            yield work.model_dump()
+            # Convert PyAlex Work object to openalex_types.Work model and then to dictionary
+            # This ensures proper validation and consistent structure
+            work_model = pyalex_to_model(work)
+            # work_dict = work_model.model_dump()
+            logger.info("Processing work", work_id=work_model.id)
+            yield work_model
 
             # Periodically log progress
             if i > 0 and i % 1000 == 0:
                 logger.info(f"Iterated through {i} works so far")
 
-    def _process_work(self, work_data: Dict[str, Any]) -> str:
+    def _process_work(self, work: Work) -> str:
         """Process a single work record.
 
         Args:
-            work_data: Work data from OpenAlex API
+            work: Work data from OpenAlex API
 
         Returns:
             String indicating operation: 'created', 'updated', or 'skipped'
         """
         # Convert to a simplified record
-        work_record = WorkRecord.from_openalex(work_data)
 
-        # Check if work exists in database
-        with Session(self.pg_engine) as session:
-            # Check if work exists
-            stmt = (
-                select(SQLModel)
-                .where(col("id") == work_record.id)
-                .select_from(SQLModel.metadata.tables["openalex_works"])
-            )
-            existing_work = session.exec(stmt).first()
+        # Use direct psycopg connection for all database operations
+        try:
+            with psycopg.connect(self.db_config_string) as conn:
+                # Create a cursor
+                with conn.cursor() as cur:
+                    # Check if the work exists in the openalex schema
+                    cur.execute("SELECT id FROM openalex.works WHERE id = %s", (work.id,))
+                    existing = cur.fetchone()
 
-            if existing_work:
-                # Update existing work
-                for field, value in work_record.model_dump().items():
-                    setattr(existing_work, field, value)
-
-                # Update full data JSON and timestamp
-                existing_work.data = work_data
-                existing_work.last_updated = datetime.now()
-
-                session.add(existing_work)
-                session.commit()
-                return "updated"
-            else:
-                # Create new work
-                # Need to use raw SQL to insert due to dynamic table
-                from sqlalchemy import insert
-
-                stmt = insert(SQLModel.metadata.tables["openalex_works"]).values(
-                    id=work_record.id,
-                    title=work_record.title,
-                    publication_date=work_record.publication_date,
-                    doi=work_record.doi,
-                    updated_date=work_record.updated_date,
-                    data=work_data,
-                    last_updated=datetime.now(),
-                )
-                session.execute(stmt)
-                session.commit()
-                return "created"
+                    if existing:
+                        # Update existing work using direct SQL
+                        logger.info(f"Work {work.id} already exists in the database")
+                        return "skipped"
+               
+                    else:
+                        # Insert new work record
+                        cur.execute(f"INSERT INTO {work._sql_table_name} {work.sql_columns} VALUES {work.sql_values}")
+                        conn.commit()
+                        return "created"
+        except Exception as e:
+            logger.error(f"Database error processing work {work.id}: {str(e)}")
+            raise
 
 
 # Convenience function to run an update job
 def run_works_update(
     from_date: Optional[str] = None,
-    postgres_url: Optional[str] = None,
+    postgres_url: Optional[str] = None,  # Kept for backward compatibility
     job_db_url: Optional[str] = None,
     batch_size: Optional[int] = None,
     max_records: Optional[int] = None,
+    job_id: Optional[int] = None,
 ) -> Job:
     """Run a works update job.
 
     Args:
         from_date: ISO format date string (YYYY-MM-DD) to start updates from
-        postgres_url: PostgreSQL connection URL
+        postgres_url: PostgreSQL connection URL (deprecated, use DB_CONFIG_STRING in env vars instead)
         job_db_url: Job database connection URL
         batch_size: Number of records to process in a batch
         max_records: Maximum number of records to process
+        job_id: Optional existing job ID to use
 
     Returns:
         The completed job record
@@ -329,11 +395,11 @@ def run_works_update(
 
     # Create updater
     updater = OpenAlexDBUpdater(
-        postgres_url=postgres_url,
+        postgres_url=postgres_url,  # Will be ignored, using DB_CONFIG_STRING instead
         job_db=job_db,
         batch_size=batch_size,
         max_records=max_records,
     )
 
     # Run update
-    return updater.update_works(from_date=from_date)
+    return updater.update_works(from_date=from_date, job_id=job_id)

@@ -23,7 +23,7 @@ psycopg2-binary = "^2.9.9"
 uvicorn = {version = "^0.25.0", extras = ["standard"], optional = true}
 
 httpx = "^0.28.1"
-pyalex = "^0.16"
+pyalex = "^0.18"
 
 fastapi = {extras = ["standard"], version = "^0.115.11"}
 [tool.poetry.group.dev.dependencies]

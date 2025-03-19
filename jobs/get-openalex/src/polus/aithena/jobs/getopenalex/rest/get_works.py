@@ -23,7 +23,13 @@ from polus.aithena.jobs.getopenalex.config import OPENALEX_API_KEY, PYALEX_EMAIL
 
 logger = get_logger(__name__)
 
-pyalex.config.email = os.getenv("PYALEX_EMAIL", None)
+# Configure PyAlex with authentication details
+pyalex.config.email = PYALEX_EMAIL
+if OPENALEX_API_KEY:
+    pyalex.config.api_key = OPENALEX_API_KEY
+    logger.info(f"Configured PyAlex with API key and email: {PYALEX_EMAIL}")
+else:
+    logger.warning("No OpenAlex API key found. Some features like 'from_updated_date' filter will not work.")
 
 @lru_cache(maxsize=128)
 def get_filtered_works(

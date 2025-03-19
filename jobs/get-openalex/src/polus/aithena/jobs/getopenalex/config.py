@@ -12,7 +12,13 @@ from polus.aithena.common.logger import get_logger
 logger = get_logger(__name__)
 
 # Load environment variables from .env file if present
-load_dotenv(find_dotenv(), override=True)
+env_file = find_dotenv()
+if env_file:
+    logger.info(f"Loading environment from {env_file}")
+    load_dotenv(env_file, override=True)
+else:
+    logger.warning("No .env file found, using environment variables only")
+
 
 # =============================================
 # S3 Operation Variables
@@ -38,14 +44,24 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 PYALEX_EMAIL = os.getenv("PYALEX_EMAIL", None)
 
-# PostgreSQL connection string
-POSTGRES_URL = os.getenv("POSTGRES_URL", None)
+# =============================================
+# PostgreSQL connection
+# =============================================
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.environ.get("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "postgres")
+DB_CONFIG_STRING = f"dbname={POSTGRES_DB} user={POSTGRES_USER} password={POSTGRES_PASSWORD} host={POSTGRES_HOST} port={POSTGRES_PORT}"
+
+# Print the constructed DB_CONFIG_STRING for debugging
+print(f"DEBUG CONFIG: DB_CONFIG_STRING={DB_CONFIG_STRING}")
 
 # Job database URL for tracking update jobs
 JOB_DATABASE_URL = os.getenv("JOB_DATABASE_URL", "sqlite:///./openalex_jobs.db")
 
 # =============================================
-# Update Job Configuration 
+# Update Job Configuration
 # =============================================
 
 # Number of records to process in a batch
@@ -67,7 +83,8 @@ API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "30"))
 # Maximum retries for API requests
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
 
-logger.debug(f"""
+logger.debug(
+    f"""
              Initiliazed get-openalex config with: 
              S3_ALL_LAST_MONTH={S3_ALL_LAST_MONTH}, 
              S3_OUTPUT_PATH={S3_OUTPUT_PATH}, 
@@ -78,7 +95,8 @@ logger.debug(f"""
              API_PORT={API_PORT}, 
              LOG_LEVEL={LOG_LEVEL}, 
              PYALEX_EMAIL={PYALEX_EMAIL}, 
-             POSTGRES_URL={POSTGRES_URL}, 
+             DB_CONFIG_STRING={DB_CONFIG_STRING}, 
              JOB_DATABASE_URL={JOB_DATABASE_URL}, 
              API_REQUEST_TIMEOUT={API_REQUEST_TIMEOUT}, 
-             API_MAX_RETRIES={API_MAX_RETRIES}, OPENALEX_API_KEY={OPENALEX_API_KEY}""")
+             API_MAX_RETRIES={API_MAX_RETRIES}, OPENALEX_API_KEY={OPENALEX_API_KEY}"""
+)
