@@ -1,4 +1,5 @@
 """Ask Aithena agent module."""
+
 # pylint: disable=W1203
 from typing import Optional
 
@@ -37,8 +38,7 @@ def work_to_reference(work: dict) -> str:
     if work.get("authorships") is None:
         authors_ = ""
     else:
-        authors = [author["author"]["display_name"]
-                for author in work["authorships"]]
+        authors = [author["author"]["display_name"] for author in work["authorships"]]
         authors = [author for author in authors if author is not None]
         authors_ = ", ".join(authors)
     year_ = work["publication_year"] or ""
@@ -61,16 +61,15 @@ class Context(BaseModel):
     def to_reference(self):
         """Convert context to reference format."""
         ref = "\n".join(
-            [f"({i+1}) {work_to_reference(doc)}" for i,
-                doc in enumerate(self.docs)]
+            [f"({i+1}) {work_to_reference(doc)}" for i, doc in enumerate(self.docs)]
         )
         return ref
 
 
-@ time_logger
+@time_logger
 def embed_request(text):
     """Embed text using the embedding model."""
-    url = config.AITHENA_SERVICE_URL + f"/embed/{config.EMBED_MODEL}/generate"
+    url = config.AITHENA_SERVICE_URL + f"/embed/{config.EMBEDDING_MODEL}/generate"
     logger.debug(f"embedding query at {url}")
 
     try:
@@ -83,22 +82,22 @@ def embed_request(text):
         raise requests.RequestException(msg)
 
 
-@ time_logger
+@time_logger
 def vector_search_request(
     vector: list[float],
     table: Optional[str] = config.EMBEDDING_TABLE,
     n: Optional[int] = config.SIMILARITY_N,
-    ) -> list[dict]:
+) -> list[dict]:
     """Search for similar vectors in the database."""
     logger.debug("searching for similar vectors in the database.")
     url = config.AITHENA_SERVICE_URL + "/memory/pgvector/search"
     try:
-        res = requests.post(url, json=vector,
-                            params={
-                                "table_name": table,
-                                "n": n},
-                            timeout=config.TIMEOUT
-                            ).json()
+        res = requests.post(
+            url,
+            json=vector,
+            params={"table_name": table, "n": n},
+            timeout=config.TIMEOUT,
+        ).json()
     except Exception as e:
         msg = f"Got response: {e}"
         logger.error(f"{msg}")
@@ -108,15 +107,18 @@ def vector_search_request(
     return res
 
 
-@ time_logger
+@time_logger
 def chat_request(messages: list[dict]):
     """Chat with the model."""
     url = config.AITHENA_SERVICE_URL + f"/chat/{config.CHAT_MODEL}/generate"
     logger.debug(f"request answer from {url}")
     try:
         response = requests.post(
-            url, json=messages, params={"stream": False}, stream=False,
-            timeout=config.TIMEOUT
+            url,
+            json=messages,
+            params={"stream": False},
+            stream=False,
+            timeout=config.TIMEOUT,
         )
     except requests.RequestException as e:
         msg = (f"Chat Error: {url}.", f"Got response: {e}")
@@ -146,7 +148,7 @@ async def chat_request_stream(messages: list[dict]):
     return stream_generator()
 
 
-@ time_logger
+@time_logger
 def ask(query: AskAithenaQuery) -> AskAithenaResponse:
     """Ask Aithena and return full response."""
     logger.debug(f"ask aithena stream=False: {query}")
