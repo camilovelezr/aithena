@@ -37,6 +37,15 @@ class WorksSearchRequest(BaseModel):
     vector: list[float]
     n: int = 10
 
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    try:
+        logger.info("Health check endpoint called")
+        return {"status": "ok", "aithena-services": "running"}
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
 @time_logger
 @app.post("/memory/pgvector/search")
