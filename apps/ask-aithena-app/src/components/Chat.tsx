@@ -9,6 +9,7 @@ import { askAithena, parseStreamingResponse } from '@/services/api';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
+import { generateSessionId } from '@/lib/utils';
 
 interface ChatProps {
     mode: AIMode;
@@ -16,10 +17,11 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({ mode }) => {
     const [query, setQuery] = useState('');
+    const sessionIdRef = useRef(generateSessionId()); // Use ref instead of state
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const { messages, loading, error, addMessage, updateLastAssistantMessage, addReferencesToLastAssistantMessage, setLoading, setError } = useChatStore();
-    const { clearStatusUpdates, statusUpdates } = useRabbitMQ();
+    const { clearStatusUpdates, statusUpdates, setSessionId } = useRabbitMQ();
     const { settings } = useSettings();
 
     // Track if we should hide status updates (after responding status is received)
@@ -30,6 +32,9 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
     // Calculate the line height of the textarea dynamically
     const [lineHeight, setLineHeight] = useState(20); // Default estimate
     const maxLines = 10; // Show scrollbar after ~10 lines
+
+    const hasUserScrolled = useRef(false);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
 
     // Reset hide status when starting a new query
     useEffect(() => {
@@ -87,99 +92,133 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
         if (statusUpdates.length > 0) {
             const latestStatus = statusUpdates[statusUpdates.length - 1].status;
             if (latestStatus === 'responding') {
-                // Don't hide the status card, just record the time
                 setResponseStartTime(new Date());
+                setHideStatusAfterResponding(true);
             }
         }
     }, [statusUpdates]);
 
-    // Scroll to bottom when messages change
+    // Check if user has scrolled up
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        const container = chatContainerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            if (scrollHeight - scrollTop - clientHeight > 10) { // Small threshold
+                hasUserScrolled.current = true;
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    // Initialize session ID only once when component mounts
+    useEffect(() => {
+        console.log('Initializing session ID once:', sessionIdRef.current);
+        setSessionId(sessionIdRef.current);
+    }, []); // Empty dependency array = run once on mount
+
+    // Handle message updates and scrolling
+    const updateMessageAndScroll = (content: string) => {
+        // Update message first
+        updateLastAssistantMessage(content);
+
+        // Only scroll if user hasn't scrolled up and we're not animating
+        if (!hasUserScrolled.current && chatContainerRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+            const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+
+            if (isAtBottom) {
+                chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            }
+        }
+    };
+
+    const scrollToBottom = () => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!query.trim() || loading) return;
-
-        // Store query before clearing the input
-        const submittedQuery = query;
-
-        // Clear input immediately
-        setQuery('');
-
-        // Clear previous status updates
-        clearStatusUpdates();
-
-        // Add user message
-        addMessage({ content: submittedQuery, role: 'user' });
-
-        // Create empty assistant message to show typing indicator
-        addMessage({ content: '', role: 'assistant' });
-
-        // Set loading state
-        setLoading(true);
-        setError(null);
+        const currentQuery = query.trim();
+        if (!currentQuery || loading) return;
 
         try {
-            // Pass the similarity_n setting from the global context
-            const response = await askAithena(submittedQuery, mode, settings.similarity_n);
+            setLoading(true);
+            setQuery(''); // Clear input immediately after submission
+            clearStatusUpdates();
+            setHideStatusAfterResponding(false);
+            hasUserScrolled.current = false; // Reset scroll state for new query
 
-            // Start streaming
+            // Add user message to chat
+            addMessage({ role: 'user', content: currentQuery });
+            addMessage({ role: 'assistant', content: '' });
+
+            // Initial scroll to bottom for new query
+            scrollToBottom();
+
+            // Make API request with session ID
+            const response = await askAithena(currentQuery, mode, sessionIdRef.current);
+
+            // Use parseStreamingResponse to handle the stream
             const streamParser = parseStreamingResponse(response);
-            let fullText = '';
+            let assistantMessage = '';
             let referencesPart = '';
             let captureReferences = false;
 
             for await (const chunk of streamParser) {
-                if (captureReferences) {
-                    // Already in references mode, continue collecting
-                    referencesPart += chunk;
-                } else if (chunk.includes('\n\n\n')) {
-                    // Found the separator, split the chunk
-                    captureReferences = true;
-                    const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
-                    // Preserve line breaks exactly as they come from the LLM
-                    fullText += beforeSeparator;
-                    if (afterSeparator) {
-                        referencesPart = afterSeparator;
+                if (hasUserScrolled.current) {
+                    // If user has scrolled up, just update content without scrolling
+                    if (captureReferences) {
+                        referencesPart += chunk;
+                    } else if (chunk.includes('\n\n\n')) {
+                        captureReferences = true;
+                        const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
+                        assistantMessage += beforeSeparator;
+                        if (afterSeparator) {
+                            referencesPart = afterSeparator;
+                        }
+                        updateLastAssistantMessage(assistantMessage);
+                    } else {
+                        assistantMessage += chunk;
+                        updateLastAssistantMessage(assistantMessage);
                     }
-                    updateLastAssistantMessage(fullText);
                 } else {
-                    // Normal content - preserve original formatting including line breaks
-                    fullText += chunk;
-                    updateLastAssistantMessage(fullText);
+                    // Normal flow with scrolling
+                    if (captureReferences) {
+                        referencesPart += chunk;
+                    } else if (chunk.includes('\n\n\n')) {
+                        captureReferences = true;
+                        const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
+                        assistantMessage += beforeSeparator;
+                        if (afterSeparator) {
+                            referencesPart = afterSeparator;
+                        }
+                        updateMessageAndScroll(assistantMessage);
+                    } else {
+                        assistantMessage += chunk;
+                        updateMessageAndScroll(assistantMessage);
+                    }
                 }
             }
 
             // Apply references if found
             if (referencesPart.trim()) {
-                console.log("References found, length:", referencesPart.trim().length);
-
-                try {
-                    // Parse the JSON references
-                    const referencesData = JSON.parse(referencesPart.trim());
-                    console.log("Parsed references data:", referencesData);
-
-                    // Pass the structured data directly to the store
-                    addReferencesToLastAssistantMessage(referencesPart.trim());
-                } catch (error) {
-                    console.error("Failed to parse references JSON:", error);
-
-                    // Fallback to old format handling if JSON parsing fails
-                    let cleanedReferences = referencesPart.trim();
-                    console.log("Falling back to text references format:", cleanedReferences);
-
-                    // Format as HTML for backwards compatibility
-                    cleanedReferences = `<div class="legacy-references-format">${cleanedReferences}</div>`;
-                    addReferencesToLastAssistantMessage(cleanedReferences);
+                addReferencesToLastAssistantMessage(referencesPart.trim());
+                if (!hasUserScrolled.current) {
+                    updateMessageAndScroll(assistantMessage);
+                } else {
+                    updateLastAssistantMessage(assistantMessage);
                 }
-            } else {
-                console.warn("No references found in response");
             }
+
         } catch (err) {
-            setError('Failed to get response. Please try again.');
-            console.error('Error during chat:', err);
+            console.error('Error:', err);
+            setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
             setLoading(false);
         }
@@ -190,7 +229,10 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
 
     return (
         <div className="flex flex-col h-full relative">
-            <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-[60px] [&::-webkit-scrollbar-thumb]:bg-gray-500 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-[24px] [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:min-h-[40px]">
+            <div
+                ref={chatContainerRef}
+                className="chat-messages-container flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-[60px] [&::-webkit-scrollbar-thumb]:bg-gray-500 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-[24px] [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-clip-padding [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:min-h-[40px]"
+            >
                 {messages.length === 0 ? (
                     <div className="flex items-center justify-center h-full px-4">
                         <motion.div
@@ -200,7 +242,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                             className="text-center max-w-xl w-full mx-auto bg-white dark:bg-[#1a2234] rounded-2xl shadow-lg shadow-black/5 dark:shadow-black/20 p-6 backdrop-blur-sm border border-gray-100 dark:border-gray-800/50"
                         >
                             <div className="mb-6">
-                                <h2 className="text-3xl font-bold mb-3 text-gray-900 dark:text-white">Welcome to AskAithena</h2>
+                                <h2 className="text-3xl font-bold mb-3 text-gray-900 dark:text-white">Welcome to Ask Aithena</h2>
                                 <p className="text-gray-600 dark:text-gray-300 text-lg leading-relaxed">
                                     Your intelligent research assistant. Ask any question and I'll provide detailed, evidence-based answers with references to scientific sources.
                                 </p>
@@ -260,7 +302,13 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                                     (index === messages.length - 1 ||
                                         (index === messages.length - 2 && messages[messages.length - 1].role === 'assistant'));
 
-                                return (
+                                // Only show user messages and assistant messages if we're responding
+                                const isRespondingStatus = statusUpdates.length > 0 &&
+                                    statusUpdates[statusUpdates.length - 1].status === 'responding';
+                                const shouldShowMessage = message.role === 'user' ||
+                                    (message.role === 'assistant' && isRespondingStatus);
+
+                                return shouldShowMessage ? (
                                     <React.Fragment key={message.id}>
                                         <MessageItem message={message} />
 
@@ -273,7 +321,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                                             />
                                         )}
                                     </React.Fragment>
-                                );
+                                ) : null;
                             })}
                         </div>
                     </div>
@@ -305,7 +353,9 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
-                                        handleSubmit(e as unknown as React.FormEvent);
+                                        if (query.trim()) {
+                                            handleSubmit(e as unknown as React.FormEvent);
+                                        }
                                     }
                                 }}
                                 placeholder={`Ask a question in ${mode} mode...`}
@@ -324,10 +374,6 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                                         type="submit"
                                         aria-label="Send message"
                                         className="p-3 rounded-full text-gray-900 dark:text-white transition-all duration-200 active:scale-95 cursor-pointer"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            handleSubmit(e);
-                                        }}
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="m22 2-7 20-4-9-9-4Z" />

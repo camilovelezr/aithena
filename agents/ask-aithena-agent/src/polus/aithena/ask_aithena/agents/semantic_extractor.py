@@ -143,7 +143,7 @@ async def run_semantic_agent(
             ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
-            routing_key="session.123",
+            routing_key=session_id,
         )
 
     res = await semantic_agent.run(f"Q: {query}")

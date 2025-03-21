@@ -17,30 +17,23 @@ export interface ApiHealthStatus {
 }
 
 // Function to ask the AI based on the selected mode
-export async function askAithena(query: string, mode: AIMode, similarityN: number = 10): Promise<Response> {
-    const endpoint = `/${mode}/ask`;
+export async function askAithena(query: string, mode: AIMode, sessionId: string): Promise<Response> {
+    const endpoint = `${API_BASE_URL}/${mode}/ask`;
 
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                query,
-                similarity_n: similarityN // Add the similarity_n parameter
-            }),
-        });
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Session-ID': sessionId
+        },
+        body: JSON.stringify({ query })
+    });
 
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
-
-        return response;
-    } catch (error) {
-        console.error('Error asking Aithena:', error);
-        throw error;
+    if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
     }
+
+    return response;
 }
 
 // Parse streaming response

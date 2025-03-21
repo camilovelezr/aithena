@@ -43,12 +43,15 @@ def retrieve_context_sync(query: str) -> Context:
 
 
 async def retrieve_context(
-    query: str, similarity_n: int, broker: Optional[RabbitBroker] = None
+    query: str,
+    similarity_n: int,
+    broker: Optional[RabbitBroker] = None,
+    session_id: Optional[str] = None,
 ) -> Context:
     with logfire.span("context_retriever workflow"):
         logger.info(f"Running context retriever with query: {query}")
         logger.info("Running semantic extracter")
-        semantics = await run_semantic_agent(query, broker)
+        semantics = await run_semantic_agent(query, broker, session_id)
         await broker.publish(
             ProcessingStatus(
                 status="searching_for_works",
@@ -56,10 +59,11 @@ async def retrieve_context(
             ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
+            routing_key=session_id,
         )
         logger.info("Running vector search")
         works = await get_similar_works_async(
-            semantics.data.sentence, similarity_n, broker
+            semantics.data.sentence, similarity_n, broker, session_id
         )
         logger.info("Creating context")
         context = Context.from_works(works)

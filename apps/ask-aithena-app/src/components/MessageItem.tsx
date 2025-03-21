@@ -278,10 +278,11 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
             className="mb-8 w-full"
+            layout={false}
         >
             <div className="px-4">
                 <motion.div
@@ -289,6 +290,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 }}
                     className={`text-base font-medium mb-2 text-gray-700 dark:text-gray-300 flex items-baseline gap-2 ${isUser ? 'justify-end' : ''}`}
+                    layout={false}
                 >
                     {isUser ? (
                         <>
@@ -312,6 +314,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
+                        layout={false}
                         className={`p-5 rounded-2xl ${isUser
                             ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg inline-block max-w-[85%]'
                             : 'bg-white dark:bg-gray-800/80 text-gray-800 dark:text-gray-100 shadow-lg shadow-gray-500/10 dark:shadow-gray-900/20 border border-gray-100 dark:border-gray-700'
@@ -330,7 +333,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                         <h1 className="text-2xl font-bold mt-3 mb-2 first:mt-0" {...props}>{children}</h1>
                                     ),
                                     h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h2 className="text-xl font-bold mt-3 mb-2" {...props}>{children}</h2>
+                                        <h2 className="text-xl font-bold mt-3 mb-1.5" {...props}>{children}</h2>
                                     ),
                                     h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
                                         <h3 className="text-lg font-bold mt-2 mb-1" {...props}>{children}</h3>
@@ -345,7 +348,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                         <h6 className="text-sm font-bold mt-2 mb-1" {...props}>{children}</h6>
                                     ),
                                     p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement> & { children: React.ReactNode }) => (
-                                        <p {...props}>{children}</p>
+                                        <p className="mt-0 mb-2 last:mb-0" {...props}>{children}</p>
                                     ),
                                     code: ({ className, children, inline, ...props }: { className?: string; children: React.ReactNode; inline?: boolean }) => {
                                         const match = /language-(\w+)/.exec(className || '');
@@ -355,7 +358,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                             <code
                                                 className={`${className ?? ''} ${inline
                                                     ? `${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-black/10 dark:bg-white/10'} rounded px-1.5 py-0.5`
-                                                    : `${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-black/5 dark:bg-white/5'} block rounded-lg p-4 language-${language}`
+                                                    : `${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-black/5 dark:bg-white/5'} block rounded-lg p-3 my-2 language-${language}`
                                                     }`}
                                                 {...props}
                                             >
@@ -364,7 +367,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                         );
                                     },
                                     table: ({ children, ...props }: React.HTMLAttributes<HTMLTableElement> & { children: React.ReactNode }) => (
-                                        <div className="overflow-x-auto my-6">
+                                        <div className="overflow-x-auto my-3">
                                             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" {...props}>
                                                 {children}
                                             </table>
@@ -382,9 +385,19 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                         </a>
                                     ),
                                     li: ({ children, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { children: React.ReactNode }) => (
-                                        <li className="my-1" {...props}>
+                                        <li className="my-0.5" {...props}>
                                             {children}
                                         </li>
+                                    ),
+                                    ul: ({ children, ...props }: React.HTMLAttributes<HTMLUListElement> & { children: React.ReactNode }) => (
+                                        <ul className="list-disc pl-6 my-1.5" {...props}>
+                                            {children}
+                                        </ul>
+                                    ),
+                                    ol: ({ children, ...props }: React.HTMLAttributes<HTMLOListElement> & { children: React.ReactNode }) => (
+                                        <ol className="list-decimal pl-6 my-1.5" {...props}>
+                                            {children}
+                                        </ol>
                                     )
                                 }}
                             >
@@ -563,7 +576,14 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
 
                                                                 <div className="text-gray-500 text-sm mt-1">
                                                                     <span className="text-gray-400">ID:</span>
-                                                                    <span className="ml-1">{ref.id}</span>
+                                                                    <a
+                                                                        href={`https://pubmed.ncbi.nlm.nih.gov/${ref.id}`}
+                                                                        className="ml-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                    >
+                                                                        {ref.id}
+                                                                    </a>
                                                                 </div>
 
                                                                 {ref.score !== null && (

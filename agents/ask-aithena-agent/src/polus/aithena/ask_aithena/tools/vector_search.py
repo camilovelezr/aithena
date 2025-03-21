@@ -62,7 +62,10 @@ def get_similar_works(text: str) -> list[dict]:
 
 
 async def get_similar_works_async(
-    text: str, similarity_n: int, broker: Optional[RabbitBroker] = None
+    text: str,
+    similarity_n: int,
+    broker: Optional[RabbitBroker] = None,
+    session_id: Optional[str] = None,
 ) -> list[dict]:
     """Asynchronously get similar works from the database."""
     emb = _embed_text(text)
@@ -74,7 +77,7 @@ async def get_similar_works_async(
             ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
-            routing_key="session.123",
+            routing_key=session_id,
         )
     try:
         async with httpx.AsyncClient() as client:
