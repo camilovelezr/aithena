@@ -26,8 +26,6 @@ logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
-# TESTING
-PROMPTS_DIR = Path("/Users/cv/code/aithena/agents/ask-aithena-agent/prompts")
 PROMPTS_DIR = PROMPTS_DIR.joinpath("reranker")
 RERANKER_AGENT_PROMPT = Path(PROMPTS_DIR, "one_step_agent.txt").read_text()
 RERANKER_CREATE_PROMPT = orjson.loads(
@@ -61,13 +59,6 @@ class RerankedWork(BaseModel):
 
     index: int = Field(..., description="The index of the work")
     score: float = Field(..., description="The score of the work")
-
-
-# query_test = "What is the effect of national diversity on a team's success?"
-
-# from polus.aithena.ask_aithena.agents import context_retriever
-
-# context = context_retriever.run(query_test)
 
 
 model = OpenAIModel(
@@ -349,13 +340,3 @@ async def rerank_context(query: str, context: Context) -> Context:
         context.reranked_indices = reranker_inds
         context.reranked_scores = reranker_scores
         return context
-
-
-# import nest_asyncio
-# nest_asyncio.apply()
-
-# res = reranker_agent.run_sync(
-#     "Be careful with the ordering of tool calls!",
-#     deps=RerankerDeps(query=query_test, context=context),
-# )
-# print(res.data)

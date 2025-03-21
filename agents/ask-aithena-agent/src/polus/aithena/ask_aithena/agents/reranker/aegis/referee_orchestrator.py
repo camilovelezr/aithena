@@ -1,23 +1,14 @@
 """Reranker Agent Referee Orchestrator"""
 
 from pathlib import Path
-import orjson
 
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema, BaseAgentConfig
 
-import instructor
 from polus.aithena.ask_aithena.config import (
     PROMPTS_DIR,
     LITELLM_URL,
     LITELLM_API_KEY,
-    RERANK_MODEL,
-    RERANK_TEMPERATURE,
-    RERANK_TOP_K,
 )
 
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-from dataclasses import dataclass
-import openai
 from polus.aithena.common.logger import get_logger
 from pydantic_ai import Agent, RunContext
 from pydantic import Field, BaseModel, ConfigDict
@@ -30,7 +21,6 @@ from polus.aithena.ask_aithena.agents.reranker.aegis.single_agent import (
     RefereeDeps,
 )
 from faststream.rabbit.broker import RabbitBroker
-from faststream.rabbit import RabbitExchange, RabbitQueue
 from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_exchange,
     ask_aithena_queue,
@@ -70,14 +60,6 @@ class AegisRerankerDeps(BaseModel):
     )
 
 
-# class RerankerOutput(BaseModel):
-#     """Output for the Reranker Agent."""
-
-#     reranked_works: list[RerankedWork] = Field(
-#         ..., description="The reranked list of works"
-#     )
-
-
 model = OpenAIModel(
     "azure-gpt-4.5",
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
@@ -87,7 +69,6 @@ aegis_reranker_agent = Agent(
     model=model,
     system_prompt=PROMPT,
     deps_type=AegisRerankerDeps,
-    # result_type=RerankerOutput,
     result_type=list[AegisRerankedWork],
 )
 
@@ -173,24 +154,3 @@ async def aegis_rerank_context(
         context.reranked_scores = reranker_scores
         context.reranked_reasons = reranker_reasons
         return context
-
-
-# query_test = "What is the effect of national diversity on a team's success?"
-
-# from polus.aithena.ask_aithena.agents import big_agent
-
-# context = big_agent.run(query_test)
-
-# import nest_asyncio
-
-# nest_asyncio.apply()
-
-# deps = RerankerDeps(query=query_test, works=context)
-# res = reranker_agent.run_sync(
-#     "Rerank the works based on the scores returned by the score_work tool.",
-#     deps=deps,
-# )
-
-
-# from pprint import pprint
-# pprint(res.data.model_dump())

@@ -1,30 +1,17 @@
 """Referee Agent (ScoreGiver) for the Reranker."""
 
-from pathlib import Path
-import orjson
-
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema, BaseAgentConfig
-
-import instructor
 from polus.aithena.ask_aithena.config import (
     PROMPTS_DIR,
     LITELLM_URL,
     LITELLM_API_KEY,
-    RERANK_MODEL,
-    RERANK_TEMPERATURE,
-    RERANK_TOP_K,
 )
 
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-from dataclasses import dataclass
-import openai
 from polus.aithena.common.logger import get_logger
 from pydantic_ai import Agent, RunContext
 from pydantic import Field, BaseModel
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
-from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.agents.reranker.aegis.tools import (
     robust_noun_phrase_overlap as robust_tool,
     simplified_ngram_overlap as simplified_tool,
@@ -36,8 +23,6 @@ logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
-# TESTING
-PROMPTS_DIR = Path("/Users/cv/code/aithena/agents/ask-aithena-agent/prompts")
 PROMPTS_DIR = PROMPTS_DIR.joinpath("reranker", "referee")
 
 with PROMPTS_DIR.joinpath("single_agent.txt").open("r") as f:
@@ -176,21 +161,3 @@ async def simplified_ngram_overlap(query: str, work: str) -> float:
         float: Overlap ratio (0 to 1), granular scoring. 1 if the work is completely on topic, 0 if completely unrelated
     """
     return simplified_tool(query, work)
-
-
-# query_test = "What is the effect of national diversity on a team's success?"
-
-# from polus.aithena.ask_aithena.agents import context_retriever
-
-# context = context_retriever.run(query_test)
-
-# import nest_asyncio
-
-# nest_asyncio.apply()
-
-# for n, work in enumerate(context.works_for_reranker):
-#     res = referee_agent.run_sync(
-#         "Help me score this work's relevance to the query",
-#         deps=RefereeDeps(query=query_test, work=work),
-#     )
-#     print(f"Work {n}: {res.data}")
