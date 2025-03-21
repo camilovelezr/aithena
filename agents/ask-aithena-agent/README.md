@@ -1,4 +1,4 @@
-# Ask Aithena (v0.1.2-dev2)
+# Ask Aithena (v0.2.0-dev0)
 
 The AskAithena agent is a high level services that implements the basic `ask` rag function.
 Provided with a question or a query, it will retrieve relevant documents from a database
