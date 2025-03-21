@@ -79,7 +79,6 @@ config_values = {
     "similarity_n": SIMILARITY_N,
     "rerank_model": RERANK_MODEL,
     "rerank_temperature": RERANK_TEMPERATURE,
-    "rerank_top_k": RERANK_TOP_K,
     "semantics_model": SEMANTICS_MODEL,
     "semantics_temperature": SEMANTICS_TEMPERATURE,
     "prompts_dir": PROMPTS_DIR,
