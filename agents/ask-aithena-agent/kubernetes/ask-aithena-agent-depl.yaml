@@ -13,25 +13,67 @@ spec:
         app: ask-aithena-agent
     spec:
       containers:
-      - name: ask-aithena-agent
-        image: camilovelezr/aithena-ask-aithena-agent:0.1.2-dev0
-        ports:
-        - containerPort: 8000
-        env:
-          - name: AITHENA_SERVICES_URL
-            value: "http://aithena-services-service-010.default.svc.cluster.local:80"
-          - name: EMBED_MODEL
-            value: "nomic-embed-text"
-          - name: CHAT_MODEL
-            value: "llama3.1"
-          - name: DB_HOST
-            value: "qdrant-service.default.svc.cluster.local"
-          - name: DB_PORT
-            value: "6333"
-        resources:
-          requests:
-            memory: "500Mi"
-            cpu: "1"
-          limits:
-            memory: "4Gi"
-            cpu: "1"
+        - name: ask-aithena-agent
+          image: ask-aithena-agent:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            # Service Information
+            - name: LOGFIRE_SERVICE_NAME
+              value: "ask-aithena-agent"
+            - name: LOGFIRE_SERVICE_VERSION
+              value: "1.0.0"
+
+            # LiteLLM Configuration
+            - name: LITELLM_URL
+              value: "http://litellm-service:4000/v1"
+            - name: LITELLM_API_KEY
+              value: "sk-12"
+            # Model Configuration
+            - name: CHAT_MODEL
+              value: "llama3.1:8b"
+            - name: SEMANTICS_MODEL
+              value: "llama3.2"
+            - name: SEMANTICS_TEMPERATURE
+              value: "0.2"
+            - name: RERANK_MODEL
+              value: "azure-gpt-4o"
+            - name: RERANK_TEMPERATURE
+              value: "0.3"
+
+            # Embedding Configuration
+            - name: EMBED_MODEL
+              value: "nomic"
+            - name: EMBEDDING_TABLE
+              value: "openalex.nomic_embed_text_768"
+            - name: SIMILARITY_N
+              value: "10"
+
+            # Directory Configuration
+            - name: PROMPTS_DIR
+              value: "/opt/executables/prompts"
+
+            # Log Level
+            - name: AITHENA_LOG_LEVEL
+              value: "DEBUG"
+
+            # RabbitMQ Configuration (optional)
+            - name: USE_RABBITMQ
+              value: "true"
+
+          resources:
+            requests:
+              memory: "500Mi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: prompts-volume
+              mountPath: /opt/executables/prompts
+      volumes:
+        - name: prompts-volume
+          hostPath:
+            path: /path/to/host/prompts # This should be updated to the actual host path
+            type: Directory
