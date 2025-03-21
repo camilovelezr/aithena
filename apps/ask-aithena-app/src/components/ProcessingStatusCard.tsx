@@ -3,7 +3,8 @@
 import React, { FC, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StatusUpdate } from '@/lib/types';
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { CheckIcon } from '@heroicons/react/24/solid';
 
 interface ProcessingStatusCardProps {
     statusUpdates: StatusUpdate[];
@@ -23,6 +24,44 @@ const statusLabels: Record<string, string> = {
     'responding': 'Generating response...',
 };
 
+// Spring animation configs
+const springTransition = {
+    type: "spring",
+    stiffness: 200,
+    damping: 25,
+    mass: 0.8
+};
+
+const ThinkingDots: FC = () => (
+    <motion.div
+        className="flex items-center justify-center gap-1"
+        animate={{ rotate: [0, 0, 0, -3, 0] }}
+        transition={{
+            duration: 2.4,
+            repeat: Infinity,
+            ease: "easeInOut"
+        }}
+    >
+        {[0, 0.2, 0.4].map((delay, i) => (
+            <motion.div
+                key={i}
+                className="w-2 h-2 rounded-full bg-gray-700 dark:bg-gray-200"
+                animate={{
+                    y: [-4, 0, -4],
+                    scale: [0.9, 1.1, 0.9],
+                    opacity: [0.8, 1, 0.8],
+                }}
+                transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    ease: [0.76, 0, 0.24, 1], // Custom easing for more organic motion
+                    delay,
+                }}
+            />
+        ))}
+    </motion.div>
+);
+
 const ProcessingStatusCard: FC<ProcessingStatusCardProps> = ({
     statusUpdates,
     visible,
@@ -32,15 +71,16 @@ const ProcessingStatusCard: FC<ProcessingStatusCardProps> = ({
     const [currentMessage, setCurrentMessage] = useState('');
     const [previousMessage, setPreviousMessage] = useState('');
     const [transitioning, setTransitioning] = useState(false);
+    const [isResponding, setIsResponding] = useState(false);
+    const [showCompletion, setShowCompletion] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const historyListRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     // Scroll to bottom of history list when expanded changes or new items are added
     useEffect(() => {
-        if (expanded && historyListRef.current) {
-            // Scroll to the bottom to show newest messages
-            historyListRef.current.scrollTop = historyListRef.current.scrollHeight;
-        }
+        if (!containerRef.current || !expanded) return;
+
+        // No auto-scrolling, let parent component handle scrolling
     }, [expanded, statusUpdates]);
 
     // Calculate thinking time if we have a responseStartTime
@@ -62,78 +102,44 @@ const ProcessingStatusCard: FC<ProcessingStatusCardProps> = ({
         if (statusUpdates.length === 0 || !visible) {
             setCurrentMessage('');
             setPreviousMessage('');
+            setIsResponding(false);
+            setShowCompletion(false);
             return;
         }
 
         const latestUpdate = statusUpdates[statusUpdates.length - 1];
+        const isRespondingStatus = latestUpdate.status === 'responding';
+        setIsResponding(isRespondingStatus);
 
-        // First check if we have a direct message from the update (added by RabbitMQ service)
-        if (latestUpdate.message) {
-            if (currentMessage !== latestUpdate.message) {
-                // If we already have a current message, move it to previous
-                if (currentMessage) {
-                    setPreviousMessage(currentMessage);
-                    setTransitioning(true);
-                }
-
-                // Set the new message
-                setCurrentMessage(latestUpdate.message);
-
-                // Clear transition state after animation
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                timeoutRef.current = setTimeout(() => {
-                    setTransitioning(false);
-                }, 500); // match transition duration
-            }
+        // Set completion state when responding starts
+        if (isRespondingStatus) {
+            setTimeout(() => setShowCompletion(true), 400);
             return;
         }
 
-        // If no direct message, try to parse status if it's a JSON string
-        const statusKey = latestUpdate.status.trim();
-        try {
-            const parsedStatus = JSON.parse(statusKey);
-            if (parsedStatus.message && typeof parsedStatus.message === 'string') {
-                // If we already have a current message, move it to previous
-                if (currentMessage !== parsedStatus.message) {
-                    if (currentMessage) {
-                        setPreviousMessage(currentMessage);
-                        setTransitioning(true);
-                    }
-
-                    // Set the new message
-                    setCurrentMessage(parsedStatus.message);
-
-                    // Clear transition state after animation
-                    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-                    timeoutRef.current = setTimeout(() => {
-                        setTransitioning(false);
-                    }, 500); // match transition duration
-                }
-                return;
+        let newMessage = '';
+        if (latestUpdate.message) {
+            newMessage = latestUpdate.message;
+        } else {
+            try {
+                const parsedStatus = JSON.parse(latestUpdate.status.trim());
+                newMessage = parsedStatus.message || statusLabels[parsedStatus.status] || parsedStatus.status;
+            } catch {
+                newMessage = statusLabels[latestUpdate.status.trim()] || latestUpdate.status;
             }
-        } catch (e) {
-            // Not JSON, continue with normal status mapping
         }
 
-        // Get message from status labels or use raw status
-        const newMessage = statusLabels[statusKey] || `${statusKey}`;
-
-        // Only update if message changed
         if (newMessage !== currentMessage) {
-            // Move current message to previous
             if (currentMessage) {
                 setPreviousMessage(currentMessage);
                 setTransitioning(true);
             }
-
-            // Set new message
             setCurrentMessage(newMessage);
 
-            // Clear transition state after animation
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
             timeoutRef.current = setTimeout(() => {
                 setTransitioning(false);
-            }, 500); // match transition duration
+            }, 600);
         }
     }, [statusUpdates, visible, currentMessage]);
 
@@ -148,118 +154,338 @@ const ProcessingStatusCard: FC<ProcessingStatusCardProps> = ({
 
     return (
         <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-2 mt-1 px-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={springTransition}
+            className={`mb-6 mt-0.5 px-6 relative ${showCompletion ? 'completion-state' : ''}`}
+            ref={containerRef}
         >
-            <div className="relative rounded-lg border border-gray-200 dark:border-gray-700/50 bg-gray-50/90 dark:bg-gray-800/30 shadow-sm overflow-hidden backdrop-blur-sm">
-                {/* Header with current status and toggle */}
+            <div className="relative">
                 <div
-                    className="p-3 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/20 transition-colors duration-200"
                     onClick={() => setExpanded(!expanded)}
+                    className={`
+                        cursor-pointer group transition-colors duration-200
+                        ${expanded ? 'mb-1' : ''}
+                        relative overflow-hidden rounded-xl
+                    `}
                 >
-                    <div className="flex-1 overflow-hidden relative h-6">
-                        {/* Previous message (fading out) */}
-                        <AnimatePresence>
-                            {transitioning && previousMessage && (
-                                <motion.div
-                                    key="previous"
-                                    initial={{ opacity: 1, x: 0 }}
-                                    animate={{ opacity: 0, x: -30 }}
-                                    exit={{ opacity: 0, x: -30 }}
-                                    transition={{ duration: 0.35 }}
-                                    className="absolute inset-0 flex items-center text-gray-600 dark:text-gray-300 text-sm"
-                                >
-                                    {previousMessage}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                    <div className="relative flex items-center gap-3 py-1.5 px-3">
+                        {/* Thinking/Completion indicator */}
+                        <div className="relative flex items-center justify-center w-8 h-8">
+                            <AnimatePresence mode="wait">
+                                {!showCompletion ? (
+                                    <motion.div
+                                        key="thinking"
+                                        className="absolute inset-0 flex items-center justify-center"
+                                        exit={{
+                                            scale: 0.5,
+                                            opacity: 0,
+                                            filter: "blur(2px)",
+                                            transition: {
+                                                duration: 0.3,
+                                                ease: [0.76, 0, 0.24, 1]
+                                            }
+                                        }}
+                                    >
+                                        <ThinkingDots />
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="completion"
+                                        className="absolute inset-0 flex items-center justify-center"
+                                        initial={{
+                                            scale: 0.5,
+                                            opacity: 0,
+                                            filter: "blur(2px)"
+                                        }}
+                                        animate={{
+                                            scale: 1,
+                                            opacity: 1,
+                                            filter: "blur(0px)"
+                                        }}
+                                        transition={{
+                                            duration: 0.5,
+                                            type: "spring",
+                                            stiffness: 200,
+                                            damping: 15
+                                        }}
+                                    >
+                                        <motion.div
+                                            initial={{ pathLength: 0, opacity: 0 }}
+                                            animate={{ pathLength: 1, opacity: 1 }}
+                                            transition={{
+                                                duration: 0.8,
+                                                ease: [0.76, 0, 0.24, 1]
+                                            }}
+                                            className="relative w-5 h-5"
+                                        >
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                className="w-5 h-5 text-gray-700 dark:text-gray-200"
+                                                strokeWidth="3"
+                                            >
+                                                <motion.path
+                                                    d="M20 6L9 17L4 12"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    initial={{ pathLength: 0 }}
+                                                    animate={{ pathLength: 1 }}
+                                                    transition={{
+                                                        duration: 0.8,
+                                                        ease: [0.76, 0, 0.24, 1]
+                                                    }}
+                                                />
+                                            </svg>
+                                        </motion.div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
 
-                        {/* Current message (fading in) */}
+                        {/* Message container */}
+                        <div className="flex-1 overflow-hidden relative min-h-[28px]">
+                            <AnimatePresence mode="popLayout">
+                                {transitioning && previousMessage && (
+                                    <motion.div
+                                        key="previous"
+                                        initial={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                                        animate={{
+                                            opacity: 0,
+                                            y: -20,
+                                            filter: "blur(2px)",
+                                            scale: 0.98
+                                        }}
+                                        exit={{
+                                            opacity: 0,
+                                            y: -25,
+                                            filter: "blur(3px)",
+                                            scale: 0.97
+                                        }}
+                                        transition={{
+                                            duration: 0.5,
+                                            ease: [0.4, 0, 0.2, 1],
+                                        }}
+                                        className="absolute inset-0 flex items-center text-gray-600 dark:text-gray-300 text-sm"
+                                        style={{
+                                            backfaceVisibility: "hidden",
+                                            WebkitFontSmoothing: "antialiased",
+                                            transform: "translate3d(0,0,0)"
+                                        }}
+                                    >
+                                        {previousMessage}
+                                    </motion.div>
+                                )}
+                                <motion.div
+                                    key="current"
+                                    initial={{
+                                        opacity: 0,
+                                        y: 20,
+                                        filter: "blur(2px)",
+                                        scale: 1.01
+                                    }}
+                                    animate={{
+                                        opacity: 1,
+                                        y: 0,
+                                        filter: "blur(0px)",
+                                        scale: 1
+                                    }}
+                                    transition={{
+                                        duration: 0.5,
+                                        ease: [0.4, 0, 0.2, 1],
+                                    }}
+                                    className={`
+                                        py-1 text-sm whitespace-pre-wrap break-words
+                                        ${showCompletion
+                                            ? 'text-primary-700 dark:text-primary-300 font-medium'
+                                            : 'text-gray-700 dark:text-gray-200'
+                                        }
+                                    `}
+                                    style={{
+                                        backfaceVisibility: "hidden",
+                                        WebkitFontSmoothing: "antialiased",
+                                        transform: "translate3d(0,0,0)"
+                                    }}
+                                >
+                                    {isResponding && thinkingTime
+                                        ? `Reasoned and searched the database for ${thinkingTime} seconds`
+                                        : currentMessage
+                                    }
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Expand indicator */}
                         <motion.div
-                            key="current"
-                            initial={{ opacity: transitioning ? 0 : 1, x: transitioning ? 30 : 0 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.5 }}
-                            className="absolute inset-0 flex items-center text-gray-700 dark:text-gray-200 text-sm"
+                            animate={{ rotate: expanded ? 180 : 0 }}
+                            transition={springTransition}
+                            className="text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors"
                         >
-                            <span className="relative mr-2 h-2 w-2 flex-shrink-0">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
-                            </span>
-                            {currentMessage}
-                        </motion.div>
-                    </div>
-                    <div className="text-gray-500 dark:text-gray-400 ml-2">
-                        {expanded ?
-                            <ChevronUpIcon className="h-4 w-4" /> :
                             <ChevronDownIcon className="h-4 w-4" />
-                        }
+                        </motion.div>
                     </div>
                 </div>
 
-                {/* Expanded view with history */}
-                <AnimatePresence>
+                {/* Expanded timeline view */}
+                <AnimatePresence mode="wait">
                     {expanded && (
                         <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ ...springTransition, mass: 0.6 }}
+                            className="relative pl-[44px] overflow-hidden"
                         >
-                            <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700">
-                                <div
-                                    ref={historyListRef}
-                                    className="pt-2 space-y-2 max-h-48 overflow-y-auto"
-                                >
-                                    {/* Display in chronological order - oldest first, newest last */}
-                                    {statusUpdates.map((update, index) => {
-                                        // First check if we have a direct message from the update
-                                        let displayMessage = update.message;
+                            {/* Timeline line with symmetric animation */}
+                            <motion.div
+                                className="absolute left-[7px] top-0 bottom-0 w-px"
+                                initial={{ scaleY: 0, opacity: 0 }}
+                                animate={{ scaleY: 1, opacity: 1 }}
+                                exit={{ scaleY: 0, opacity: 0 }}
+                                transition={{ ...springTransition, mass: 0.4 }}
+                            >
+                                <div className="h-full bg-gradient-to-b from-primary-500/20 via-primary-500/10 to-transparent dark:from-primary-400/20 dark:via-primary-400/10" />
+                            </motion.div>
 
-                                        // If no direct message, try to parse status if it's a JSON string
-                                        if (!displayMessage) {
-                                            try {
-                                                const parsedStatus = JSON.parse(update.status.trim());
-                                                displayMessage = parsedStatus.message || statusLabels[parsedStatus.status] || parsedStatus.status;
-                                            } catch {
-                                                displayMessage = statusLabels[update.status.trim()] || update.status;
-                                            }
+                            {/* Timeline items container with stagger effect */}
+                            <motion.div
+                                className="space-y-1.5 pt-0.5"
+                                initial="collapsed"
+                                animate="expanded"
+                                exit="collapsed"
+                                variants={{
+                                    expanded: {
+                                        transition: {
+                                            staggerChildren: 0.1
                                         }
+                                    },
+                                    collapsed: {
+                                        transition: {
+                                            staggerChildren: 0.05,
+                                            staggerDirection: -1
+                                        }
+                                    }
+                                }}
+                            >
+                                {statusUpdates.map((update, index) => {
+                                    // Skip ALL responding messages - they are only used as completion signals
+                                    if (update.status === 'responding') return null;
 
-                                        // Skip empty messages
-                                        if (!displayMessage) return null;
+                                    let displayMessage = update.message;
+                                    if (!displayMessage) {
+                                        try {
+                                            const parsedStatus = JSON.parse(update.status.trim());
+                                            displayMessage = parsedStatus.message || statusLabels[parsedStatus.status] || parsedStatus.status;
+                                        } catch {
+                                            displayMessage = statusLabels[update.status.trim()] || update.status;
+                                        }
+                                    }
+                                    if (!displayMessage) return null;
 
-                                        return (
-                                            <div key={index} className="flex items-start text-xs">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 mt-1.5 mr-2 flex-shrink-0"></span>
-                                                <div className="flex-1">
-                                                    <div className="text-gray-700 dark:text-gray-300">{displayMessage}</div>
-                                                    <div className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-                                                        {update.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                                    </div>
-                                                </div>
+                                    return (
+                                        <motion.div
+                                            key={index}
+                                            variants={{
+                                                expanded: {
+                                                    opacity: 1,
+                                                    x: 0,
+                                                    transition: {
+                                                        ...springTransition,
+                                                        mass: 0.2
+                                                    }
+                                                },
+                                                collapsed: {
+                                                    opacity: 0,
+                                                    x: -10,
+                                                    transition: {
+                                                        ...springTransition,
+                                                        mass: 0.1
+                                                    }
+                                                }
+                                            }}
+                                            className="flex items-center gap-3 group -ml-[5px]"
+                                        >
+                                            <motion.div
+                                                variants={{
+                                                    expanded: {
+                                                        scale: 1,
+                                                        opacity: 1
+                                                    },
+                                                    collapsed: {
+                                                        scale: 0.5,
+                                                        opacity: 0
+                                                    }
+                                                }}
+                                                className="w-2 h-2 rounded-full bg-primary-500/30 dark:bg-primary-400/30
+                                                         group-hover:bg-primary-500/50 dark:group-hover:bg-primary-400/50
+                                                         transition-colors duration-200"
+                                            />
+                                            <div className="text-sm text-gray-600 dark:text-gray-300
+                                                          group-hover:text-gray-800 dark:group-hover:text-gray-100
+                                                          transition-colors duration-200">
+                                                {displayMessage}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Thinking time footer */}
-                                {thinkingTime && (
-                                    <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center">
-                                        <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                                        </svg>
-                                        Thought for {thinkingTime} seconds
-                                    </div>
-                                )}
-                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </motion.div>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* Add styles for completion particles */}
+            <style jsx global>{`
+                @keyframes fadeInOut {
+                    0%, 100% { opacity: 0; }
+                    50% { opacity: 1; }
+                }
+
+                .completion-state {
+                    position: relative;
+                }
+
+                .completion-state::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), 
+                                              rgba(var(--primary-rgb), 0.08) 0%,
+                                              transparent 70%);
+                    opacity: 0;
+                    animation: fadeInOut 2s ease-in-out infinite;
+                    pointer-events: none;
+                    filter: blur(8px);
+                }
+
+                .completion-state::after {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), 
+                                              rgba(var(--primary-rgb), 0.05) 0%,
+                                              transparent 60%);
+                    opacity: 0;
+                    animation: fadeInOut 3s ease-in-out infinite;
+                    animation-delay: 1s;
+                    pointer-events: none;
+                    filter: blur(4px);
+                }
+
+                @property --x {
+                    syntax: '<percentage>';
+                    initial-value: 50%;
+                    inherits: false;
+                }
+
+                @property --y {
+                    syntax: '<percentage>';
+                    initial-value: 50%;
+                    inherits: false;
+                }
+            `}</style>
         </motion.div>
     );
 };

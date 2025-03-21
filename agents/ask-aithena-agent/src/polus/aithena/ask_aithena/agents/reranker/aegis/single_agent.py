@@ -62,7 +62,7 @@ class Score(BaseModel):
 
 
 model = OpenAIModel(
-    "azure-gpt-4o",
+    "azure-gpt-4.5",
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
 )
 referee_agent = Agent(

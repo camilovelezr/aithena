@@ -80,7 +80,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '' }) => {
     return (
         <motion.button
             onClick={toggleTheme}
-            className={`relative p-2.5 rounded-xl bg-gray-100 dark:bg-dark-200 hover:bg-gray-200 dark:hover:bg-dark-300 border border-gray-200/50 dark:border-gray-800/50 shadow-sm focus-ring ${className}`}
+            className={`relative p-2.5 rounded-xl bg-gray-100 dark:bg-dark-200 hover:bg-gray-200 dark:hover:bg-dark-300 border border-gray-200/50 dark:border-gray-800/50 shadow-sm focus-ring cursor-pointer ${className}`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}

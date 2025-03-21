@@ -7,7 +7,6 @@ import { Client } from '@stomp/stompjs';
 
 // Constants for RabbitMQ configuration
 const EXCHANGE_NAME = 'ask-aithena-exchange';
-const ROUTING_KEY = 'session.*'; // Use wildcard to catch all session messages
 
 class RabbitMQService {
     private client: Client | null = null;
@@ -16,15 +15,40 @@ class RabbitMQService {
     private subscription: any = null;
     private connectionChangeCallback: ((isConnected: boolean) => void) | null = null;
     private heartbeatInterval: any = null;
+    private sessionId: string | null = null;
 
-    connect(): Promise<void> {
+    isConnected(): boolean {
+        return this.connected && this.client?.connected || false;
+    }
+
+    onStatusUpdate(callback: (status: StatusUpdate) => void) {
+        this.statusUpdateCallback = callback;
+    }
+
+    onConnectionChange(callback: (isConnected: boolean) => void) {
+        this.connectionChangeCallback = callback;
+    }
+
+    setSessionId(sessionId: string) {
+        console.log('Setting session ID:', sessionId);
+        this.sessionId = sessionId;
+        // If already connected, resubscribe with new session ID
+        if (this.connected && this.client?.connected) {
+            this.subscribe();
+        }
+    }
+
+    getSessionId(): string | null {
+        return this.sessionId;
+    }
+
+    async connect(): Promise<void> {
+        if (this.connected && this.client?.connected) {
+            console.log('Already connected to RabbitMQ');
+            return;
+        }
+
         return new Promise((resolve, reject) => {
-            if (this.connected && this.client?.connected) {
-                console.log('Already connected to RabbitMQ');
-                resolve();
-                return;
-            }
-
             // Clear any existing heartbeat
             if (this.heartbeatInterval) {
                 clearInterval(this.heartbeatInterval);
@@ -55,9 +79,6 @@ class RabbitMQService {
                 reconnectDelay: 5000
             });
 
-            // Expose client for debugging
-            (window as any).stompClient = this.client;
-
             // Connection successful
             this.client.onConnect = (frame) => {
                 console.log('Connected to STOMP broker:', frame);
@@ -66,11 +87,10 @@ class RabbitMQService {
                     this.connectionChangeCallback(true);
                 }
 
-                // Subscribe to the exchange
-                this.subscribe();
-
-                // Set up heartbeat to ensure connection stays active
-                this.setupHeartbeat();
+                // Only subscribe if we have a session ID
+                if (this.sessionId) {
+                    this.subscribe();
+                }
 
                 resolve();
             };
@@ -82,307 +102,81 @@ class RabbitMQService {
                 if (this.connectionChangeCallback) {
                     this.connectionChangeCallback(false);
                 }
-
-                // Clear heartbeat on error
-                if (this.heartbeatInterval) {
-                    clearInterval(this.heartbeatInterval);
-                    this.heartbeatInterval = null;
-                }
-
                 reject(new Error(`STOMP error: ${frame.headers.message}`));
             };
 
-            this.client.onWebSocketError = (event) => {
-                console.error('WebSocket Error:', event);
-                this.connected = false;
-                if (this.connectionChangeCallback) {
-                    this.connectionChangeCallback(false);
-                }
-
-                // Clear heartbeat on error
-                if (this.heartbeatInterval) {
-                    clearInterval(this.heartbeatInterval);
-                    this.heartbeatInterval = null;
-                }
-
-                reject(event);
-            };
-
-            this.client.onDisconnect = () => {
-                console.log('Disconnected from STOMP broker');
-                this.connected = false;
-                if (this.connectionChangeCallback) {
-                    this.connectionChangeCallback(false);
-                }
-
-                // Clear heartbeat on disconnect
-                if (this.heartbeatInterval) {
-                    clearInterval(this.heartbeatInterval);
-                    this.heartbeatInterval = null;
-                }
-            };
-
-            // Activate the connection
-            try {
-                this.client.activate();
-            } catch (error) {
-                console.error('Failed to activate STOMP client:', error);
-                this.connected = false;
-                if (this.connectionChangeCallback) {
-                    this.connectionChangeCallback(false);
-                }
-
-                // Clear heartbeat on error
-                if (this.heartbeatInterval) {
-                    clearInterval(this.heartbeatInterval);
-                    this.heartbeatInterval = null;
-                }
-
-                reject(error);
-            }
+            // Start the connection
+            this.client.activate();
         });
     }
 
-    // Set up a heartbeat to keep the connection active and verify it's working
-    private setupHeartbeat(): void {
-        // Clear any existing interval
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-        }
-
-        // Check connection every 30 seconds
-        this.heartbeatInterval = setInterval(() => {
-            if (!this.client?.connected) {
-                console.warn('Heartbeat detected disconnected client');
-                this.connected = false;
-                if (this.connectionChangeCallback) {
-                    this.connectionChangeCallback(false);
-                }
-
-                // Try to reconnect
-                this.connect().catch(err => {
-                    console.error('Failed to reconnect during heartbeat:', err);
-                });
-                return;
-            }
-
-            // Send a lightweight heartbeat message
-            this.sendHeartbeat();
-
-        }, 30000); // Every 30 seconds
-    }
-
-    // Send a lightweight heartbeat message to verify connection
-    private sendHeartbeat(): void {
-        if (!this.client?.connected) {
-            return;
-        }
-
-        try {
-            this.client.publish({
-                destination: `/exchange/${EXCHANGE_NAME}/heartbeat`,
-                body: 'heartbeat',
-                headers: { 'content-type': 'text/plain' }
-            });
-            console.log('Heartbeat sent to RabbitMQ');
-        } catch (error) {
-            console.error('Error sending heartbeat:', error);
-            this.connected = false;
-            if (this.connectionChangeCallback) {
-                this.connectionChangeCallback(false);
-            }
-        }
-    }
-
     private subscribe(): void {
-        if (!this.client?.connected) {
-            console.error('Cannot subscribe - STOMP client not connected');
+        if (!this.client || !this.sessionId) {
+            console.error('Cannot subscribe: client not initialized or session ID not set');
             return;
         }
 
-        try {
-            // Unsubscribe if there's an existing subscription
-            if (this.subscription) {
-                this.subscription.unsubscribe();
-                this.subscription = null;
-            }
-
-            console.log('Setting up STOMP subscription to:', `/exchange/${EXCHANGE_NAME}/${ROUTING_KEY}`);
-
-            // Subscribe to all messages from the exchange with our routing key pattern
-            this.subscription = this.client.subscribe(
-                `/exchange/${EXCHANGE_NAME}/${ROUTING_KEY}`,
-                (message) => {
-                    console.log('⭐ Received STOMP message:', {
-                        body: message.body,
-                        headers: message.headers,
-                        destination: message.headers.destination
-                    });
-
-                    try {
-                        // Try to parse JSON if it is JSON
-                        let messageBody = message.body;
-                        let parsedStatus = null;
-                        let statusMessage = null;
-
-                        try {
-                            // Try to parse as JSON
-                            parsedStatus = JSON.parse(message.body);
-
-                            // Handle new format with status and message fields
-                            if (parsedStatus && typeof parsedStatus === 'object') {
-                                if (this.statusUpdateCallback) {
-                                    this.statusUpdateCallback({
-                                        status: parsedStatus.status || messageBody,
-                                        message: parsedStatus.message,
-                                        timestamp: new Date()
-                                    });
-                                }
-                                return; // Already processed
-                            }
-
-                            // Handle old string format
-                            messageBody = typeof parsedStatus === 'string' ? parsedStatus : JSON.stringify(parsedStatus);
-                        } catch (e) {
-                            // Not JSON, use as is
-                        }
-
-                        if (this.statusUpdateCallback) {
-                            this.statusUpdateCallback({
-                                status: messageBody,
-                                timestamp: new Date()
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Error processing message:', error);
-                    }
-                },
-                {
-                    id: 'status-updates-subscription',
-                    ack: 'auto'
-                }
-            );
-
-            console.log('✅ Successfully subscribed to RabbitMQ exchange:', EXCHANGE_NAME);
-        } catch (error) {
-            console.error('Error subscribing to RabbitMQ:', error);
-        }
-    }
-
-    onStatusUpdate(callback: (status: StatusUpdate) => void): void {
-        this.statusUpdateCallback = callback;
-    }
-
-    onConnectionChange(callback: (isConnected: boolean) => void): void {
-        this.connectionChangeCallback = callback;
-        // Immediately call with current status
-        callback(this.connected);
-    }
-
-    disconnect(): void {
-        // Clear heartbeat
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-            this.heartbeatInterval = null;
-        }
-
-        if (this.client) {
+        // Unsubscribe from any existing subscription
+        if (this.subscription) {
             try {
-                // Unsubscribe first
-                if (this.subscription) {
-                    this.subscription.unsubscribe();
-                    this.subscription = null;
-                }
-
-                // Then deactivate the client
-                this.client.deactivate();
-                console.log('STOMP client deactivated');
-            } catch (error) {
-                console.error('Error disconnecting STOMP client:', error);
-            } finally {
-                this.client = null;
-                this.connected = false;
+                this.subscription.unsubscribe();
+            } catch (e) {
+                console.error('Error unsubscribing:', e);
             }
         }
-    }
 
-    // For debugging - check if connected
-    isConnected(): boolean {
-        const result = this.connected && !!this.client?.connected;
+        // Subscribe to messages for this specific session
+        const routingKey = `session.${this.sessionId}`;
+        const destination = `/exchange/${EXCHANGE_NAME}/${routingKey}`;
 
-        // Force a heartbeat immediately if we think we're connected
-        // This will help verify the connection
-        if (result) {
-            this.sendHeartbeat();
-        }
+        console.log('Subscribing to:', destination);
 
-        return result;
-    }
-
-    // For debugging - send a test message
-    sendTestMessage(): void {
-        if (!this.client?.connected) {
-            console.error('Cannot send test message - not connected');
-            return;
-        }
-
-        try {
-            this.client.publish({
-                destination: `/exchange/${EXCHANGE_NAME}/session.123`,
-                body: 'test_message',
-                headers: { 'content-type': 'text/plain' }
-            });
-            console.log('Test message sent');
-        } catch (error) {
-            console.error('Error sending test message:', error);
-        }
+        this.subscription = this.client.subscribe(destination, (message) => {
+            console.log('Received message:', message.body);
+            if (this.statusUpdateCallback) {
+                try {
+                    // Try to parse as JSON first
+                    const parsed = JSON.parse(message.body);
+                    this.statusUpdateCallback({
+                        status: parsed.status || message.body,
+                        message: parsed.message || message.body,
+                        timestamp: new Date()
+                    });
+                } catch (e) {
+                    // If not JSON, treat the entire message as both status and message
+                    this.statusUpdateCallback({
+                        status: message.body,
+                        message: message.body,
+                        timestamp: new Date()
+                    });
+                }
+            }
+        });
     }
 }
 
-// Singleton instance
+// Create a singleton instance
 const rabbitmqService = new RabbitMQService();
 
+// Export the hook
 export function useRabbitMQ() {
     const [connected, setConnected] = useState(false);
     const [statusUpdates, setStatusUpdates] = useState<StatusUpdate[]>([]);
 
-    // Force check connection directly from service
-    const checkConnectionStatus = () => {
-        return rabbitmqService.isConnected();
-    };
-
     useEffect(() => {
-        // Only run once on component mount
         let mounted = true;
 
-        async function setupConnection() {
-            try {
-                await rabbitmqService.connect();
-                if (mounted) {
-                    setConnected(true);
-                }
-            } catch (error) {
-                console.error('RabbitMQ connection failed:', error);
-                if (mounted) {
-                    setConnected(false);
-                }
-            }
-        }
-
-        setupConnection();
-
-        // Set up the status update callback
+        // Set up callbacks first
         const statusCallback = (status: StatusUpdate) => {
-            console.log('Status update received:', status);
             if (mounted) {
+                console.log('Received status update:', status);
                 setStatusUpdates(prev => [...prev, status]);
             }
         };
 
-        // Set up connection change callback
         const connectionCallback = (isConnected: boolean) => {
-            console.log('Connection status changed:', isConnected);
             if (mounted) {
+                console.log('Connection status changed:', isConnected);
                 setConnected(isConnected);
             }
         };
@@ -390,10 +184,13 @@ export function useRabbitMQ() {
         rabbitmqService.onStatusUpdate(statusCallback);
         rabbitmqService.onConnectionChange(connectionCallback);
 
-        // Clean up on unmount
+        // Then connect
+        rabbitmqService.connect().catch(error => {
+            console.error('Failed to connect to RabbitMQ:', error);
+        });
+
         return () => {
             mounted = false;
-            // Don't disconnect here - keep the singleton alive
         };
     }, []);
 
@@ -401,17 +198,11 @@ export function useRabbitMQ() {
         setStatusUpdates([]);
     };
 
-    // For debugging
-    const sendTestMessage = () => {
-        rabbitmqService.sendTestMessage();
-    };
-
     return {
         connected,
         statusUpdates,
         clearStatusUpdates,
-        sendTestMessage, // Expose the test function
-        checkConnectionStatus // Expose direct connection check
+        setSessionId: (sessionId: string) => rabbitmqService.setSessionId(sessionId)
     };
 }
 

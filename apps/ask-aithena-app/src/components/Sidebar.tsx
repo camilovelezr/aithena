@@ -8,6 +8,7 @@ import { API_URL } from '@/lib/env';
 import { useApiHealth } from '@/services/api';
 import { useSettings } from '@/lib/settings';
 import { createPortal } from 'react-dom';
+import rabbitmqService from '@/services/rabbitmq';
 
 interface DebugSectionProps {
     title: string;
@@ -72,7 +73,7 @@ const DebugSection: React.FC<DebugSectionProps> = ({ title, children, defaultOpe
         <div className="mb-4 rounded-xl overflow-hidden bg-white dark:bg-[#1e293b] border border-gray-200/50 dark:border-gray-700/50">
             <motion.button
                 onClick={handleToggle}
-                className="w-full px-4 py-3 text-left flex justify-between items-center hover:bg-gray-100 dark:hover:bg-[#252f44] transition-colors focus-ring"
+                className="w-full px-4 py-3 text-left flex justify-between items-center hover:bg-gray-100 dark:hover:bg-[#252f44] transition-colors focus-ring cursor-pointer"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
                 transition={{ duration: 0.2 }}
@@ -196,32 +197,31 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         updateSettings({ similarity_n: similarityN });
     };
 
-    // Force a connection check when the sidebar is opened
+    // Check connection status when sidebar opens
     useEffect(() => {
         if (isOpen) {
-            // Force a heartbeat/check to make sure status is current
-            const isConnected = checkConnectionStatus();
-            console.log('Sidebar opened - immediate connection check:', isConnected);
+            const isConnected = rabbitmqService.isConnected();
             setConnectionStatus(isConnected);
-        }
-    }, [isOpen, checkConnectionStatus]);
 
-    // Update connection status whenever the sidebar is opened or every 2 seconds
-    useEffect(() => {
-        if (isOpen) {
-            // Check current connection status
-            const checkConnection = () => {
-                const isConnected = checkConnectionStatus();
-                console.log('Debug panel - direct connection check:', isConnected);
+            // Set up connection change listener
+            rabbitmqService.onConnectionChange((isConnected) => {
                 setConnectionStatus(isConnected);
-            };
-
-            // Set up interval to check connection
-            const interval = setInterval(checkConnection, 2000);
-
-            return () => clearInterval(interval);
+            });
         }
-    }, [isOpen, checkConnectionStatus]);
+    }, [isOpen]);
+
+    // Periodic connection status check
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const interval = setInterval(() => {
+            const isConnected = rabbitmqService.isConnected();
+            console.log('Periodic connection check:', isConnected);
+            setConnectionStatus(isConnected);
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, [isOpen]);
 
     // Update CSS variables when tooltip is shown
     useEffect(() => {
@@ -231,6 +231,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             document.documentElement.style.setProperty('--tooltip-x', `${rect.left}px`);
         }
     }, [showTooltip]);
+
+    const handleTestConnection = () => {
+        const isConnected = rabbitmqService.isConnected();
+        setConnectionStatus(isConnected);
+
+        // Try to reconnect if not connected
+        if (!isConnected) {
+            rabbitmqService.connect().catch(error => {
+                console.error('Failed to reconnect:', error);
+            });
+        }
+    };
+
+    const handleDebugPanelClick = () => {
+        setIsDebugPanelOpen(!isDebugPanelOpen);
+    };
 
     if (!mounted) return null;
 
@@ -256,7 +272,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                             </motion.h2>
                             <motion.button
                                 onClick={onClose}
-                                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#252f44] transition-colors text-gray-600 dark:text-gray-400 focus-ring"
+                                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#252f44] transition-colors text-gray-600 dark:text-gray-400 focus-ring cursor-pointer"
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                             >
@@ -352,13 +368,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                                                 </span>
                                             </div>
                                             <motion.button
-                                                onClick={() => sendTestMessage()}
+                                                onClick={handleTestConnection}
                                                 className="w-full bg-white hover:bg-gray-100 dark:bg-[#252f44] dark:hover:bg-[#2b374d] text-gray-900 dark:text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-ring"
                                                 disabled={!connectionStatus}
                                                 whileHover={connectionStatus ? { scale: 1.02 } : {}}
                                                 whileTap={connectionStatus ? { scale: 0.98 } : {}}
                                             >
-                                                Send Test Message
+                                                Test Connection
                                             </motion.button>
                                         </div>
                                     </DebugSection>

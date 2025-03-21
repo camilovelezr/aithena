@@ -20,19 +20,23 @@ from dataclasses import dataclass
 import openai
 from polus.aithena.common.logger import get_logger
 from pydantic_ai import Agent, RunContext
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, ConfigDict
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
-from polus.aithena.ask_aithena.agents.reranker.aegis.tools import (
-    robust_noun_phrase_overlap as robust_tool,
-    simplified_ngram_overlap as simplified_tool,
-)
 from polus.aithena.ask_aithena.agents.reranker.aegis.single_agent import (
     referee_agent,
     RefereeDeps,
 )
+from faststream.rabbit.broker import RabbitBroker
+from faststream.rabbit import RabbitExchange, RabbitQueue
+from polus.aithena.ask_aithena.rabbit import (
+    ask_aithena_exchange,
+    ask_aithena_queue,
+    ProcessingStatus,
+)
+from typing import Optional
 import logfire
 
 logfire.configure()
@@ -54,8 +58,16 @@ class AegisRerankedWork(BaseModel):
 class AegisRerankerDeps(BaseModel):
     """Dependencies for the Reranker Agent."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     query: str = Field(..., description="The original user query")
     works: Context = Field(..., description="The list of works to rerank")
+    broker: Optional[RabbitBroker] = Field(
+        None, description="The RabbitMQ broker to use for the reranking"
+    )
+    session_id: Optional[str] = Field(
+        None, description="The session ID to use for the status updates"
+    )
 
 
 # class RerankerOutput(BaseModel):
@@ -67,7 +79,7 @@ class AegisRerankerDeps(BaseModel):
 
 
 model = OpenAIModel(
-    "azure-gpt-4o",
+    "azure-gpt-4.5",
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
 )
 
@@ -107,14 +119,51 @@ async def score_work(
     return AegisRerankedWork(index=index, score=res.data.score, reason=res.data.reason)
 
 
-async def aegis_rerank_context(query: str, context: Context) -> Context:
+@aegis_reranker_agent.tool
+async def publish_status(ctx: RunContext[AegisRerankerDeps], summary: str) -> None:
+    """Publish a status update.
+
+    Use this tool to publish a status update to the RabbitMQ queue.
+    This must be done before starting the reranking process and before returning the final result.
+    Also, YOU MUST use this tool to keep the user informed about the progress of the reranking process.
+    Call this tool OFTEN!
+    If calling this tool before starting the reranking process, you should pass a description of what you will do.
+    If calling this tool after the reranking process, you should pass a summary of the process.
+    If calling this tool in the middle of the reranking process, you should pass a summary of the process so far and hint
+    at what you will do next.
+    You need to call this tool OFTEN! CALL IT after 3-4 score_work calls. User NEEDS to know what's going on.
+    Keep the summaries between 1 and 3 sentences. Use first person and a conversational tone. Finish with three dots (...)
+    DO NOT talk about 'reranking', keep your sentences conversational and not too technical.
+
+    Args:
+        summary: the summary of the reranking process, MUST BE IN FIRST PERSON
+    """
+    await ctx.deps.broker.publish(
+        ProcessingStatus(
+            status="reranking_context",
+            message=summary,
+        ).model_dump_json(),
+        exchange=ask_aithena_exchange,
+        queue=ask_aithena_queue,
+        routing_key=ctx.deps.session_id,
+    )
+
+
+async def aegis_rerank_context(
+    query: str,
+    context: Context,
+    broker: Optional[RabbitBroker] = None,
+    session_id: Optional[str] = None,
+) -> Context:
     """Rerank the context based on the query."""
     with logfire.span("aegis_rerank_context"):
         logger.info(f"Aegis Reranking context for query: {query}")
         logger.info(f"Context: {context.model_dump_json()}")
         reranked_data = await aegis_reranker_agent.run(
             "You are an expert reranker who's super careful",
-            deps=AegisRerankerDeps(query=query, works=context),
+            deps=AegisRerankerDeps(
+                query=query, works=context, broker=broker, session_id=session_id
+            ),
         )
         logger.info(f"Reranked data: {reranked_data.data}")
         reranker_inds = [x.index for x in reranked_data.data]
