@@ -1,14 +1,12 @@
 """Main API application for the Ask Aithena agent."""
 
 import logging
-import os
 import sys
 
 from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from faststream.rabbit.fastapi import RabbitRouter
-from faststream.rabbit import RabbitExchange, RabbitQueue, ExchangeType
 import httpx
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -30,7 +28,6 @@ from polus.aithena.ask_aithena.rabbit import (
 )
 from polus.aithena.ask_aithena.config import SIMILARITY_N
 
-# from pydantic import BaseModel, Field
 import logfire
 
 logfire.configure(
@@ -70,7 +67,6 @@ async def _declare_exchanges_and_queues():
         await queue.bind(exchange, routing_key="session.*")
     except Exception as e:
         logger.error(f"Error declaring exchanges and queues: {e}")
-        # raise e
     finally:
         await rabbit_router.broker.close()
 
@@ -104,17 +100,9 @@ def create_application() -> FastAPI:
         return {"status": "ok", "message": "Ask Aithena API is running"}
 
     @rabbit_router.get("/health", tags=["health"])
-    # @app.get("/health", tags=["health"])
     async def detailed_health_check():
         """Detailed health check endpoint that verifies litellm connectivity."""
         health_info = {"status": "ok", "api": "running", "litellm": "unknown"}
-        # await rabbit_router.broker.publish(
-        #     "THIS IS A TEST",
-        #     exchange=ask_aithena_exchange,
-        #     queue=ask_aithena_queue,
-        #     routing_key="session.123",
-        # )
-
         try:
             # Test litellm connection
             async with httpx.AsyncClient() as client:
@@ -212,24 +200,12 @@ async def shield_ask(
     logfire.info("Received Shield ask request", query=request.query)
     session_id = f"session.{x_session_id}"
     # Semantic Analysis and Context Retrieval
-    # await rabbit_router.broker.publish(
-    #     "retrieve_context",
-    #     exchange=ask_aithena_exchange,
-    #     queue=ask_aithena_queue,
-    #     routing_key="session.123",
-    # )
     context_norank = await retrieve_context(
         request.query, request.similarity_n, rabbit_router.broker, session_id
     )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context")
-    # await rabbit_router.broker.publish(
-    #     "rerank_context_one_step",
-    #     exchange=ask_aithena_exchange,
-    #     queue=ask_aithena_queue,
-    #     routing_key="session.123",
-    # )
     await rabbit_router.broker.publish(
         ProcessingStatus(
             status="reranking_context",
@@ -242,12 +218,6 @@ async def shield_ask(
     context_ = await rerank_context(request.query, context_norank)
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context reranked", context=context_.model_dump())
-    # await rabbit_router.broker.publish(
-    #     "preparing_response",
-    #     exchange=ask_aithena_exchange,
-    #     queue=ask_aithena_queue,
-    #     routing_key="session.123",
-    # )
     await rabbit_router.broker.publish(
         ProcessingStatus(
             status="preparing_response",
@@ -291,24 +261,12 @@ async def aegis_ask(
     logfire.info("Received Aegis ask request", query=request.query)
     session_id = f"session.{x_session_id}"
     # Semantic Analysis and Context Retrieval
-    # await rabbit_router.broker.publish(
-    #     "retrieve_context",
-    #     exchange=ask_aithena_exchange,
-    #     queue=ask_aithena_queue,
-    #     routing_key="session.123",
-    # )
     context_norank = await retrieve_context(
         request.query, request.similarity_n, rabbit_router.broker, session_id
     )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context very carefully")
-    # await rabbit_router.broker.publish(
-    #     "aegis_rerank_context",
-    #     exchange=ask_aithena_exchange,
-    #     queue=ask_aithena_queue,
-    #     routing_key="session.123",
-    # )
     context_ = await aegis_rerank_context(
         request.query, context_norank, rabbit_router.broker, session_id
     )
