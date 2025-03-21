@@ -25,6 +25,8 @@ docker_build/
 #logs
 *.out
 *.log
+*.csv
+*.txt
 
 # poetry
 poetry.lock
@@ -201,3 +203,9 @@ cython_debug/
 
 #husky
 node_modules
+
+# vscode
+*.code-workspace
+
+# dbs
+*.db
