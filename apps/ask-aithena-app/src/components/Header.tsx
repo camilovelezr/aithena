@@ -23,7 +23,7 @@ const Header: FC<HeaderProps> = ({ currentMode, onModeChange, onToggleSidebar })
                 <div className="flex items-center gap-3">
                     <motion.button
                         onClick={onToggleSidebar}
-                        className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-dark-200 focus-ring"
+                        className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-[#252f44] focus-ring"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                     >

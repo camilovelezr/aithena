@@ -10,7 +10,11 @@ from polus.aithena.ask_aithena.config import (
 )
 from polus.aithena.common.logger import get_logger
 from faststream.rabbit import RabbitBroker
-from polus.aithena.ask_aithena.rabbit import ask_aithena_exchange, ask_aithena_queue
+from polus.aithena.ask_aithena.rabbit import (
+    ask_aithena_exchange,
+    ask_aithena_queue,
+    ProcessingStatus,
+)
 import logfire
 from typing import Optional
 
@@ -58,13 +62,16 @@ def get_similar_works(text: str) -> list[dict]:
 
 
 async def get_similar_works_async(
-    text: str, broker: Optional[RabbitBroker] = None
+    text: str, similarity_n: int, broker: Optional[RabbitBroker] = None
 ) -> list[dict]:
     """Asynchronously get similar works from the database."""
     emb = _embed_text(text)
     if broker is not None:
         await broker.publish(
-            "finding_relevant_documents",
+            ProcessingStatus(
+                status="finding_relevant_documents",
+                message=f"Searching through my database...",
+            ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
             routing_key="session.123",
@@ -74,7 +81,7 @@ async def get_similar_works_async(
             logfire.instrument_httpx(client, capture_headers=True)
             response = await client.post(
                 f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
-                json={"vector": emb, "n": SIMILARITY_N, "table_name": EMBEDDING_TABLE},
+                json={"vector": emb, "n": similarity_n, "table_name": EMBEDDING_TABLE},
             )
             response.raise_for_status()
             return response.json()

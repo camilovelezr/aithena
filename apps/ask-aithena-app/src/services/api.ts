@@ -1,6 +1,7 @@
 import { AIMode } from '@/lib/types';
 import { API_URL } from '@/lib/env';
 import { useState, useEffect } from 'react';
+import { useSettings } from '@/lib/settings';
 
 // Define the base URL for the API
 const API_BASE_URL = API_URL;
@@ -16,7 +17,7 @@ export interface ApiHealthStatus {
 }
 
 // Function to ask the AI based on the selected mode
-export async function askAithena(query: string, mode: AIMode): Promise<Response> {
+export async function askAithena(query: string, mode: AIMode, similarityN: number = 10): Promise<Response> {
     const endpoint = `/${mode}/ask`;
 
     try {
@@ -25,7 +26,10 @@ export async function askAithena(query: string, mode: AIMode): Promise<Response>
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ query }),
+            body: JSON.stringify({
+                query,
+                similarity_n: similarityN // Add the similarity_n parameter
+            }),
         });
 
         if (!response.ok) {

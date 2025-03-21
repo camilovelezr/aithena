@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, UUID4
 import datetime
 from faststream.rabbit import RabbitExchange, RabbitQueue, ExchangeType
+from typing import Optional
 
 STAGES = {
     "owl": [
@@ -41,10 +42,11 @@ ask_aithena_queue = RabbitQueue(
 class ProcessingStatus(BaseModel):
     """Status message for query processing."""
 
-    session_id: UUID4 = Field(..., description="Unique identifier for the session")
+    # session_id: UUID4 = Field(..., description="Unique identifier for the session")
     timestamp: str = Field(
         ...,
         description="Timestamp of the status update",
         default_factory=lambda: datetime.datetime.now().isoformat(),
     )
-    stage: str = Field(..., description="Current processing stage")
+    status: str = Field(..., description="Current processing status")
+    message: Optional[str] = Field(None, description="Current processing message")

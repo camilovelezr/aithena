@@ -3,11 +3,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageItem from './MessageItem';
-import StatusIndicator from './StatusIndicator';
+import ProcessingStatusCard from './ProcessingStatusCard';
 import { useChatStore } from '@/store/chatStore';
 import { askAithena, parseStreamingResponse } from '@/services/api';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
+import { useSettings } from '@/lib/settings';
 
 interface ChatProps {
     mode: AIMode;
@@ -19,10 +20,12 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const { messages, loading, error, addMessage, updateLastAssistantMessage, addReferencesToLastAssistantMessage, setLoading, setError } = useChatStore();
     const { clearStatusUpdates, statusUpdates } = useRabbitMQ();
+    const { settings } = useSettings();
 
     // Track if we should hide status updates (after responding status is received)
     const [hideStatusAfterResponding, setHideStatusAfterResponding] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [responseStartTime, setResponseStartTime] = useState<Date | null>(null);
 
     // Calculate the line height of the textarea dynamically
     const [lineHeight, setLineHeight] = useState(20); // Default estimate
@@ -79,12 +82,13 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
         }
     };
 
-    // Check for 'responding' status and hide indicator when found
+    // Check for 'responding' status and capture response time
     useEffect(() => {
         if (statusUpdates.length > 0) {
             const latestStatus = statusUpdates[statusUpdates.length - 1].status;
             if (latestStatus === 'responding') {
-                setHideStatusAfterResponding(true);
+                // Don't hide the status card, just record the time
+                setResponseStartTime(new Date());
             }
         }
     }, [statusUpdates]);
@@ -118,7 +122,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
         setError(null);
 
         try {
-            const response = await askAithena(submittedQuery, mode);
+            // Pass the similarity_n setting from the global context
+            const response = await askAithena(submittedQuery, mode, settings.similarity_n);
 
             // Start streaming
             const streamParser = parseStreamingResponse(response);
@@ -249,36 +254,32 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                 ) : (
                     <div className="pt-4 pb-2 px-4">
                         <div className="max-w-4xl mx-auto">
-                            {messages.map((message) => {
-                                // Don't show the last assistant message if we haven't received 'responding' status yet
-                                if (loading && message.role === 'assistant' && message === messages[messages.length - 1] && !hideStatusAfterResponding) {
-                                    return null;
-                                }
-                                return <MessageItem key={message.id} message={message} />;
+                            {messages.map((message, index) => {
+                                const isLastUserMessage =
+                                    message.role === 'user' &&
+                                    (index === messages.length - 1 ||
+                                        (index === messages.length - 2 && messages[messages.length - 1].role === 'assistant'));
+
+                                return (
+                                    <React.Fragment key={message.id}>
+                                        <MessageItem message={message} />
+
+                                        {/* Show ProcessingStatusCard after the last user message during loading and even after responding starts */}
+                                        {isLastUserMessage && (
+                                            <ProcessingStatusCard
+                                                statusUpdates={statusUpdates}
+                                                visible={statusUpdates.length > 0}
+                                                responseStartTime={responseStartTime || undefined}
+                                            />
+                                        )}
+                                    </React.Fragment>
+                                );
                             })}
                         </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
-
-            <AnimatePresence>
-                {loading && !hideStatusAfterResponding && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 20 }}
-                        className="flex justify-center"
-                    >
-                        <div className="w-full max-w-4xl px-4">
-                            <StatusIndicator
-                                statusUpdates={statusUpdates}
-                                visible={loading && statusUpdates.length > 0}
-                            />
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             {error && (
                 <div className="flex justify-center">

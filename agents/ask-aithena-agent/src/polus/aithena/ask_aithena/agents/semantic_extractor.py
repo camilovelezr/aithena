@@ -26,7 +26,11 @@ import openai
 from polus.aithena.common.logger import get_logger
 import logfire
 from faststream.rabbit import RabbitBroker
-from polus.aithena.ask_aithena.rabbit import ask_aithena_exchange, ask_aithena_queue
+from polus.aithena.ask_aithena.rabbit import (
+    ask_aithena_exchange,
+    ask_aithena_queue,
+    ProcessingStatus,
+)
 
 
 logfire.configure()
@@ -134,7 +138,9 @@ async def run_semantic_agent(
     """
     if broker is not None:
         await broker.publish(
-            "analyzing_query",
+            ProcessingStatus(
+                status="analyzing_query", message=f"Analyzing your question..."
+            ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
             routing_key="session.123",
