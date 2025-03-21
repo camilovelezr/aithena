@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from faststream.rabbit.fastapi import RabbitRouter
 from faststream.rabbit import RabbitExchange, RabbitQueue, ExchangeType
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from polus.aithena.ask_aithena.config import (
     LOGFIRE_SERVICE_NAME,
     LOGFIRE_SERVICE_VERSION,
@@ -22,7 +22,12 @@ from polus.aithena.ask_aithena.agents.responder import responder_agent
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.agents.reranker.one_step_reranker import rerank_context
 from polus.aithena.ask_aithena.agents.reranker.aegis import aegis_rerank_context
-from polus.aithena.ask_aithena.rabbit import ask_aithena_exchange, ask_aithena_queue
+from polus.aithena.ask_aithena.rabbit import (
+    ask_aithena_exchange,
+    ask_aithena_queue,
+    ProcessingStatus,
+)
+from polus.aithena.ask_aithena.config import SIMILARITY_N
 
 # from pydantic import BaseModel, Field
 import logfire
@@ -137,6 +142,7 @@ app = create_application()
 # Add the request model
 class AskRequest(BaseModel):
     query: str
+    similarity_n: int = Field(default=SIMILARITY_N)
 
 
 @rabbit_router.post("/owl/ask")
@@ -152,11 +158,16 @@ async def owl_ask(request: AskRequest):
     #     queue=ask_aithena_queue,
     #     routing_key="session.123",
     # )
-    context_ = await retrieve_context(request.query, rabbit_router.broker)
+    context_ = await retrieve_context(
+        request.query, request.similarity_n, rabbit_router.broker
+    )
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context retrieved", context=context_.model_dump())
     await rabbit_router.broker.publish(
-        "preparing_response",
+        ProcessingStatus(
+            status="preparing_response",
+            message=f"I found {request.similarity_n} documents. Let me prepare my response...",
+        ).model_dump_json(),
         exchange=ask_aithena_exchange,
         queue=ask_aithena_queue,
         routing_key="session.123",
@@ -170,7 +181,9 @@ async def owl_ask(request: AskRequest):
             """
         ) as response:
             await rabbit_router.broker.publish(
-                "responding",
+                ProcessingStatus(
+                    status="responding",
+                ).model_dump_json(),
                 exchange=ask_aithena_exchange,
                 queue=ask_aithena_queue,
                 routing_key="session.123",
@@ -198,7 +211,9 @@ async def shield_ask(request: AskRequest):
     #     queue=ask_aithena_queue,
     #     routing_key="session.123",
     # )
-    context_norank = await retrieve_context(request.query, rabbit_router.broker)
+    context_norank = await retrieve_context(
+        request.query, request.similarity_n, rabbit_router.broker
+    )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context")
@@ -254,7 +269,9 @@ async def aegis_ask(request: AskRequest):
     #     queue=ask_aithena_queue,
     #     routing_key="session.123",
     # )
-    context_norank = await retrieve_context(request.query, rabbit_router.broker)
+    context_norank = await retrieve_context(
+        request.query, request.similarity_n, rabbit_router.broker
+    )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
     logger.info("Reranking context very carefully")

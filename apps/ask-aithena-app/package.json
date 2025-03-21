@@ -9,6 +9,7 @@
         "lint": "next lint"
     },
     "dependencies": {
+        "@heroicons/react": "^2.2.0",
         "@stomp/stompjs": "^7.0.1",
         "@types/amqplib": "^0.10.4",
         "@types/node": "^20.10.6",

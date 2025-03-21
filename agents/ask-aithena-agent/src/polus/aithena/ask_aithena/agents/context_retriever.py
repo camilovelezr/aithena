@@ -4,6 +4,11 @@ It uses the semantic agent to get the main topic of the query and then uses the 
 """
 
 from polus.aithena.ask_aithena.agents.semantic_extractor import run_semantic_agent
+from polus.aithena.ask_aithena.rabbit import (
+    ask_aithena_exchange,
+    ask_aithena_queue,
+    ProcessingStatus,
+)
 from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.tools.vector_search import (
@@ -38,14 +43,24 @@ def retrieve_context_sync(query: str) -> Context:
 
 
 async def retrieve_context(
-    query: str, broker: Optional[RabbitBroker] = None
+    query: str, similarity_n: int, broker: Optional[RabbitBroker] = None
 ) -> Context:
     with logfire.span("context_retriever workflow"):
         logger.info(f"Running context retriever with query: {query}")
         logger.info("Running semantic extracter")
         semantics = await run_semantic_agent(query, broker)
+        await broker.publish(
+            ProcessingStatus(
+                status="searching_for_works",
+                message=f"Now I will search for works related to {semantics.data.sentence.lower()}...",
+            ).model_dump_json(),
+            exchange=ask_aithena_exchange,
+            queue=ask_aithena_queue,
+        )
         logger.info("Running vector search")
-        works = await get_similar_works_async(semantics.data.sentence, broker)
+        works = await get_similar_works_async(
+            semantics.data.sentence, similarity_n, broker
+        )
         logger.info("Creating context")
         context = Context.from_works(works)
         return context

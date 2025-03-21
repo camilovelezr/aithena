@@ -222,9 +222,27 @@ class RabbitMQService {
                     try {
                         // Try to parse JSON if it is JSON
                         let messageBody = message.body;
+                        let parsedStatus = null;
+                        let statusMessage = null;
+
                         try {
-                            const parsed = JSON.parse(message.body);
-                            messageBody = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                            // Try to parse as JSON
+                            parsedStatus = JSON.parse(message.body);
+
+                            // Handle new format with status and message fields
+                            if (parsedStatus && typeof parsedStatus === 'object') {
+                                if (this.statusUpdateCallback) {
+                                    this.statusUpdateCallback({
+                                        status: parsedStatus.status || messageBody,
+                                        message: parsedStatus.message,
+                                        timestamp: new Date()
+                                    });
+                                }
+                                return; // Already processed
+                            }
+
+                            // Handle old string format
+                            messageBody = typeof parsedStatus === 'string' ? parsedStatus : JSON.stringify(parsedStatus);
                         } catch (e) {
                             // Not JSON, use as is
                         }

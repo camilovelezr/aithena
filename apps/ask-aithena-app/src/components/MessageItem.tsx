@@ -327,22 +327,22 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                 className={`prose dark:prose-invert max-w-none text-base whitespace-pre-line break-words ${isUser ? '!text-gray-900 dark:!text-white prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-code:text-gray-900 dark:prose-code:text-white' : ''}`}
                                 components={{
                                     h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h1 className="text-2xl font-bold mt-6 mb-4 first:mt-0" {...props}>{children}</h1>
+                                        <h1 className="text-2xl font-bold mt-3 mb-2 first:mt-0" {...props}>{children}</h1>
                                     ),
                                     h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h2 className="text-xl font-bold mt-5 mb-3" {...props}>{children}</h2>
+                                        <h2 className="text-xl font-bold mt-3 mb-2" {...props}>{children}</h2>
                                     ),
                                     h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h3 className="text-lg font-bold mt-4 mb-2" {...props}>{children}</h3>
+                                        <h3 className="text-lg font-bold mt-2 mb-1" {...props}>{children}</h3>
                                     ),
                                     h4: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h4 className="text-base font-bold mt-3 mb-2" {...props}>{children}</h4>
+                                        <h4 className="text-base font-bold mt-2 mb-1" {...props}>{children}</h4>
                                     ),
                                     h5: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h5 className="text-sm font-bold mt-3 mb-1" {...props}>{children}</h5>
+                                        <h5 className="text-sm font-bold mt-2 mb-1" {...props}>{children}</h5>
                                     ),
                                     h6: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h6 className="text-sm font-bold mt-3 mb-1" {...props}>{children}</h6>
+                                        <h6 className="text-sm font-bold mt-2 mb-1" {...props}>{children}</h6>
                                     ),
                                     p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement> & { children: React.ReactNode }) => (
                                         <p {...props}>{children}</p>

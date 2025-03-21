@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import React from 'react';
 import Script from 'next/script';
+import SettingsProvider from '@/lib/settings';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -102,11 +103,13 @@ export default function RootLayout({
             <body
                 className={`${inter.className} bg-gradient-to-br from-gray-50 via-gray-50 to-gray-100 dark:from-[#0a0f1a] dark:via-[#0a0f1a] dark:to-[#0f172a] text-gray-900 dark:text-white min-h-screen overflow-hidden`}
             >
-                <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary-500/5 via-transparent to-transparent dark:from-primary-500/10 pointer-events-none" />
-                <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-primary-600/[0.05] via-transparent to-transparent dark:from-primary-600/5 pointer-events-none" />
-                <div className="relative z-10">
-                    {children}
-                </div>
+                <SettingsProvider>
+                    <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary-500/5 via-transparent to-transparent dark:from-primary-500/10 pointer-events-none" />
+                    <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-primary-600/[0.05] via-transparent to-transparent dark:from-primary-600/5 pointer-events-none" />
+                    <div className="relative z-10">
+                        {children}
+                    </div>
+                </SettingsProvider>
             </body>
         </html>
     );

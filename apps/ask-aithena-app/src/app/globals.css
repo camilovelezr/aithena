@@ -24,6 +24,11 @@
     --scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Create dark-200 variable that was missing */
+.dark .dark-200 {
+    background-color: #252f44;
+}
+
 /* Smooth transitions */
 @keyframes fadeIn {
     from {
@@ -219,11 +224,12 @@ button:active:not(:disabled) {
 /* Focus styles */
 .focus-ring:focus {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(13, 162, 231, 0.5), 0 0 0 4px white;
+    /* box-shadow: 0 0 0 2px rgba(13, 162, 231, 0.5), 0 0 0 4px white; */
 }
 
 .dark .focus-ring:focus {
-    box-shadow: 0 0 0 2px rgba(13, 162, 231, 0.5), 0 0 0 4px rgb(15 23 42);
+    outline: none;
+    /* box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5), 0 0 0 4px rgb(15 23 42); */
 }
 
 /* Markdown line break handling */
@@ -245,32 +251,32 @@ button:active:not(:disabled) {
 .prose h1 {
     font-size: 2rem;
     font-weight: 700;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
     line-height: 1.2;
 }
 
 .prose h2 {
     font-size: 1.5rem;
     font-weight: 700;
-    margin-top: 1.25rem;
-    margin-bottom: 0.75rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
     line-height: 1.3;
 }
 
 .prose h3 {
     font-size: 1.25rem;
     font-weight: 600;
-    margin-top: 1rem;
-    margin-bottom: 0.5rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
     line-height: 1.4;
 }
 
 .prose h4 {
     font-size: 1.125rem;
     font-weight: 600;
-    margin-top: 0.75rem;
-    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
     line-height: 1.5;
 }
 
@@ -278,7 +284,7 @@ button:active:not(:disabled) {
 .prose h6 {
     font-size: 1rem;
     font-weight: 600;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     margin-bottom: 0.25rem;
     line-height: 1.5;
 }
