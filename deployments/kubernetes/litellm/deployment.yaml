@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      containers:
+      - name: litellm
+        image: ghcr.io/berriai/litellm:main-latest
+        ports:
+        - containerPort: 4000
+        env:
+        - name: DATABASE_URL
+          value: postgresql://$(LITELLM_DB_USER):$(LITELLM_DB_PASSWORD)@litellm-db:5432/litellm
+        - name: STORE_MODEL_IN_DB
+          value: "True"
+        - name: OLLAMA_HOST
+          value: "http://ollama-service:11434"
+        - name: LITELLM_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-secret
+              key: username
+        - name: LITELLM_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-secret
+              key: password
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        args:
+        - "--config=/app/config.yaml"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: config-volume
+        persistentVolumeClaim:
+          claimName: litellm-config-pvc 
