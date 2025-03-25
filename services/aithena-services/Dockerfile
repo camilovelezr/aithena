@@ -14,7 +14,10 @@ COPY services/aithena-services ${EXEC_DIR}/aithena/services/aithena-services
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Git and other dependencies in a single RUN command for efficiency
-RUN apt-get update && apt-get install -y --no-install-recommends git && \
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
+    echo UTC > /etc/timezone && \
+    apt-get update && apt-get install -y --no-install-recommends git && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install the tool using pip
