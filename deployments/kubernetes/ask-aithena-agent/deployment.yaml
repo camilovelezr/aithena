@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ask-aithena-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ask-aithena-agent
+  template:
+    metadata:
+      labels:
+        app: ask-aithena-agent
+    spec:
+      containers:
+      - name: ask-aithena-agent
+        image: camilovelezr/ask-aithena-agent:1.0.0-dev1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: ask-aithena-agent-pv
+          mountPath: /opt/prompts
+        env:
+        - name: LITELLM_URL
+          value: http://litellm-service:4000/v1
+        - name: LITELLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ask-aithena-agent-secret
+              key: litellm_api_key
+        - name: USE_LOGFIRE
+          value: "false"
+        - name: CHAT_MODEL
+          value: "azure-gpt-4.5"
+        - name: CHAT_MODEL_TEMPERATURE
+          value: "0.3"
+        - name: SEMANTICS_MODEL
+          value: "llama3.2" 
+        - name: SEMANTICS_TEMPERATURE
+          value: "0.2"
+        - name: RERANK_MODEL
+          value: "azure-gpt-4o"
+        - name: RERANK_TEMPERATURE
+          value: "0.2"
+        - name: EMBED_MODEL
+          value: "nomic"
+        - name: EMBEDDING_TABLE
+          value: "openalex.nomic_embed_text_768"
+        - name: PROMPTS_DIR
+          value: "/opt/prompts"
+        - name: RABBITMQ_URL
+          value: "amqp://guest:guest@rabbitmq-service:5672/"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: ask-aithena-agent-pv
+        persistentVolumeClaim:
+          claimName: ask-aithena-agent-pvc

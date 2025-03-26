@@ -4,8 +4,8 @@ metadata:
   name: ollama-models-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
-      storage: 20Gi
+      storage: 250Gi
   storageClassName: standard 

@@ -16,10 +16,11 @@ from polus.aithena.ask_aithena.agents.reranker.aegis.tools import (
     robust_noun_phrase_overlap as robust_tool,
     simplified_ngram_overlap as simplified_tool,
 )
-import logfire
+from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.logfire_logger import logfire
 
-logfire.configure()
-logfire.instrument_openai()
+if USE_LOGFIRE:
+    logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
@@ -54,7 +55,7 @@ referee_agent = Agent(
     model=model,
     system_prompt=REFREEE_AGENT_PROMPT,
     deps_type=RefereeDeps,
-    instrument=True,
+    instrument=USE_LOGFIRE,
     result_type=Score,
 )
 topic_agent = Agent(
@@ -74,7 +75,7 @@ topic_agent = Agent(
         "Return a score of exactly 0 if the work is completely unrelated to the query's subject."
         "Do not return intermediate values - this is a binary assessment of topical relevance."
     ),
-    instrument=True,
+    instrument=USE_LOGFIRE,
     result_type=int,
 )
 intent_matching_agent = Agent(
@@ -96,7 +97,7 @@ intent_matching_agent = Agent(
         "- 0.1-0.3: The work barely addresses the query's intent"
         "- 0.0: The work's intent is completely unrelated to the query's intent"
     ),
-    instrument=True,
+    instrument=USE_LOGFIRE,
     result_type=float,
 )
 

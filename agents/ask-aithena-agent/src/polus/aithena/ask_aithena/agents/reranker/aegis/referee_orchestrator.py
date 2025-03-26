@@ -27,10 +27,11 @@ from polus.aithena.ask_aithena.rabbit import (
     ProcessingStatus,
 )
 from typing import Optional
-import logfire
+from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.logfire_logger import logfire
 
-logfire.configure()
-logfire.instrument_openai()
+if USE_LOGFIRE:
+    logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
@@ -137,7 +138,25 @@ async def aegis_rerank_context(
     session_id: Optional[str] = None,
 ) -> Context:
     """Rerank the context based on the query."""
-    with logfire.span("aegis_rerank_context"):
+    if USE_LOGFIRE:
+        with logfire.span("aegis_rerank_context"):
+            logger.info(f"Aegis Reranking context for query: {query}")
+            logger.info(f"Context: {context.model_dump_json()}")
+            reranked_data = await aegis_reranker_agent.run(
+                "You are an expert reranker who's super careful",
+                deps=AegisRerankerDeps(
+                    query=query, works=context, broker=broker, session_id=session_id
+                ),
+            )
+            logger.info(f"Reranked data: {reranked_data.data}")
+            reranker_inds = [x.index for x in reranked_data.data]
+            reranker_scores = [x.score for x in reranked_data.data]
+            reranker_reasons = [x.reason for x in reranked_data.data]
+            context.reranked_indices = reranker_inds
+            context.reranked_scores = reranker_scores
+            context.reranked_reasons = reranker_reasons
+            return context
+    else:
         logger.info(f"Aegis Reranking context for query: {query}")
         logger.info(f"Context: {context.model_dump_json()}")
         reranked_data = await aegis_reranker_agent.run(

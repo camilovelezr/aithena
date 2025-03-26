@@ -4,11 +4,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import StatusIndicator from './StatusIndicator';
-import { API_URL } from '@/lib/env';
 import { useApiHealth } from '@/services/api';
 import { useSettings } from '@/lib/settings';
 import { createPortal } from 'react-dom';
 import rabbitmqService from '@/services/rabbitmq';
+import { useEndpoints } from '@/lib/hooks/useEndpoints';
 
 interface DebugSectionProps {
     title: string;
@@ -129,11 +129,12 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-    const { connected, statusUpdates, sendTestMessage, checkConnectionStatus } = useRabbitMQ();
-    const { healthStatus, error: apiCheckError, loading: apiCheckLoading, refreshStatus } = useApiHealth(60000);
+    const { connected, statusUpdates } = useRabbitMQ();
+    const { healthStatus, error: apiCheckError, loading: apiCheckLoading, refreshStatus } = useApiHealth();
+    const { endpoints } = useEndpoints();
     const isDevMode = process.env.NODE_ENV === 'development';
     const { settings, updateSettings } = useSettings();
-
+    
     // Force refresh of connection status
     const [connectionStatus, setConnectionStatus] = useState(connected);
     const [mounted, setMounted] = useState(false);
@@ -244,10 +245,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         }
     };
 
-    const handleDebugPanelClick = () => {
-        setIsDebugPanelOpen(!isDebugPanelOpen);
-    };
-
     if (!mounted) return null;
 
     return (
@@ -295,6 +292,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* Preferences Section - Always Visible */}
                         <DebugSection title="Preferences">
                             <div ref={preferencesRef} className="space-y-4">
                                 <div className="space-y-2">
@@ -351,6 +349,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                                 </div>
                             </div>
                         </DebugSection>
+                        
                         {/* Debug Panel Section (only visible in dev mode) */}
                         {isDevMode && (
                             <DebugSection title="Debug Panel" defaultOpen={true}>
@@ -435,12 +434,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                                     >
                                         <div className="space-y-3 text-sm">
                                             <div className="p-3 rounded-lg bg-white dark:bg-[#252f44]">
-                                                <div className="text-gray-500 dark:text-gray-400 mb-1">API URL</div>
-                                                <div className="text-gray-900 dark:text-white break-all font-mono text-xs">{API_URL}</div>
-                                            </div>
-                                            <div className="p-3 rounded-lg bg-white dark:bg-[#252f44]">
                                                 <div className="text-gray-500 dark:text-gray-400 mb-1">Environment</div>
-                                                <div className="text-gray-900 dark:text-white font-mono text-xs">{process.env.NODE_ENV}</div>
+                                                <div className="text-gray-900 dark:text-white font-mono text-xs">
+                                                    {process.env.NODE_ENV} - {endpoints?.apiUrl || 'Loading...'}
+                                                </div>
                                             </div>
                                         </div>
                                     </DebugSection>

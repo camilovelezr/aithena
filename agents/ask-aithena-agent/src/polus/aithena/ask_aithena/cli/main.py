@@ -6,9 +6,7 @@ import os
 import sys
 import uvicorn
 from typing import List, Optional
-from pathlib import Path
 
-from dotenv import load_dotenv, find_dotenv
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger("ask_aithena.cli")
@@ -24,19 +22,6 @@ def get_version() -> str:
 
 def serve_command(args: argparse.Namespace) -> None:
     """Run the Ask Aithena API server."""
-    # Try to load .env from current directory, or check in parent directories
-    dotenv_path = find_dotenv(raise_error_if_not_found=False)
-    if dotenv_path:
-        logger.info(f"Loading environment variables from {dotenv_path}")
-        load_dotenv(dotenv_path, override=True)
-    else:
-        # Also check if there's a .env in the current working directory
-        cwd_env = Path(os.getcwd()) / ".env"
-        if cwd_env.exists():
-            logger.info(f"Loading environment variables from {cwd_env}")
-            load_dotenv(cwd_env, override=True)
-        else:
-            logger.warning("No .env file found. Using default values.")
 
     logger.info(f"Starting Ask Aithena API server on {args.host}:{args.port}")
     uvicorn.run(
@@ -73,11 +58,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level",
     )
-    serve_parser.add_argument(
-        "--env-file",
-        type=str,
-        help="Path to .env file (default: auto-detect)",
-    )
     serve_parser.set_defaults(func=serve_command)
 
     args = parser.parse_args(argv)
@@ -89,16 +69,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not hasattr(args, "func"):
         parser.print_help()
         return 1
-
-    # If env-file is provided, load it
-    if hasattr(args, "env_file") and args.env_file:
-        env_path = Path(args.env_file)
-        if env_path.exists():
-            logger.info(f"Loading environment variables from {env_path}")
-            load_dotenv(env_path, override=True)
-        else:
-            logger.error(f"Specified .env file not found: {env_path}")
-            return 1
 
     args.func(args)
     return 0

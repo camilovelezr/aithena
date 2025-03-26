@@ -3,15 +3,11 @@
 from polus.aithena.common.logger import get_logger
 from pathlib import Path
 import os
-from dotenv import find_dotenv, load_dotenv
-
-# Load the environment variables from the .env file in the folder hierarchy.
-# The values from the .env file will override the system environment variables.
-load_dotenv(find_dotenv(), override=True)
 
 logger = get_logger(__name__)
 
 # logging
+USE_LOGFIRE = os.environ.get("USE_LOGFIRE", default="False").lower() == "true"
 LOGFIRE_SERVICE_NAME = os.environ.get(
     "LOGFIRE_SERVICE_NAME", default="ask-aithena-agent"
 )
@@ -27,32 +23,27 @@ PROMPTS_DIR = os.environ.get("PROMPTS_DIR", default="./prompts")
 PROMPTS_DIR = Path(PROMPTS_DIR).resolve()
 
 CHAT_MODEL = os.environ.get("CHAT_MODEL", default="llama3.1:8b")
-CHAT_MODEL_BEST_OF = os.environ.get("CHAT_MODEL_BEST_OF", default=None)
-CHAT_MODEL_ECHO = os.environ.get("CHAT_MODEL_ECHO", default=None)
 CHAT_MODEL_FREQUENCY_PENALTY = os.environ.get(
     "CHAT_MODEL_FREQUENCY_PENALTY", default=None
 )
-CHAT_MODEL_LOGIT_BIAS = os.environ.get("CHAT_MODEL_LOGIT_BIAS", default=None)
-CHAT_MODEL_LOGPROBS = os.environ.get("CHAT_MODEL_LOGPROBS", default=None)
+CHAT_MODEL_FREQUENCY_PENALTY = float(CHAT_MODEL_FREQUENCY_PENALTY) if CHAT_MODEL_FREQUENCY_PENALTY is not None else None
 CHAT_MODEL_MAX_TOKENS = os.environ.get("CHAT_MODEL_MAX_TOKENS", default=None)
+CHAT_MODEL_MAX_TOKENS = int(CHAT_MODEL_MAX_TOKENS) if CHAT_MODEL_MAX_TOKENS is not None else None
 CHAT_MODEL_TOP_P = os.environ.get("CHAT_MODEL_TOP_P", default=None)
+CHAT_MODEL_TOP_P = float(CHAT_MODEL_TOP_P) if CHAT_MODEL_TOP_P is not None else None
 CHAT_MODEL_PRESENCE_PENALTY = os.environ.get(
     "CHAT_MODEL_PRESENCE_PENALTY", default=None
 )
-CHAT_MODEL_N = os.environ.get("CHAT_MODEL_N", default=None)
+CHAT_MODEL_PRESENCE_PENALTY = float(CHAT_MODEL_PRESENCE_PENALTY) if CHAT_MODEL_PRESENCE_PENALTY is not None else None
 CHAT_MODEL_SEED = os.environ.get("CHAT_MODEL_SEED", default=None)
-CHAT_MODEL_TEMPERATURE = os.environ.get("CHAT_MODEL_TEMPERATURE", default=None)
+CHAT_MODEL_SEED = int(CHAT_MODEL_SEED) if CHAT_MODEL_SEED is not None else None
+CHAT_MODEL_TEMPERATURE = float(os.environ.get("CHAT_MODEL_TEMPERATURE", default=0.3))
 
 CHAT_MODEL_PARAMS = {
-    "best_of": CHAT_MODEL_BEST_OF,
-    "echo": CHAT_MODEL_ECHO,
     "frequency_penalty": CHAT_MODEL_FREQUENCY_PENALTY,
-    "logit_bias": CHAT_MODEL_LOGIT_BIAS,
-    "logprobs": CHAT_MODEL_LOGPROBS,
     "max_tokens": CHAT_MODEL_MAX_TOKENS,
     "top_p": CHAT_MODEL_TOP_P,
     "presence_penalty": CHAT_MODEL_PRESENCE_PENALTY,
-    "n": CHAT_MODEL_N,
     "seed": CHAT_MODEL_SEED,
     "temperature": CHAT_MODEL_TEMPERATURE,
 }
@@ -66,7 +57,7 @@ EMBEDDING_MODEL = os.environ.get("EMBED_MODEL", default="nomic")
 EMBEDDING_TABLE = os.environ.get("EMBEDDING_TABLE", "openalex.nomic_embed_text_768")
 SIMILARITY_N = int(os.environ.get("SIMILARITY_N", default=10))
 
-USE_RABBITMQ = os.environ.get("USE_RABBITMQ", default=False)
+RABBITMQ_URL = os.environ.get("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
 
 # Consolidate configuration logging into a single structured log entry
 config_values = {
@@ -82,6 +73,7 @@ config_values = {
     "semantics_model": SEMANTICS_MODEL,
     "semantics_temperature": SEMANTICS_TEMPERATURE,
     "prompts_dir": PROMPTS_DIR,
-    "use_rabbitmq": USE_RABBITMQ,
+    "rabbitmq_url": RABBITMQ_URL,
+    "use_logfire": USE_LOGFIRE,
 }
 logger.debug("Configuration values: %s", config_values)

@@ -4,8 +4,8 @@ metadata:
   name: litellm-config-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
   resources:
     requests:
-      storage: 1Gi
-  storageClassName: standard 
+      storage: 0.25Gi
+  storageClassName: standard

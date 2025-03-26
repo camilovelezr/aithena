@@ -8,6 +8,7 @@ spec:
   ports:
   - port: 4000
     targetPort: 4000
+    nodePort: 32102
     protocol: TCP
     name: http
-  type: ClusterIP 
+  type: NodePort 

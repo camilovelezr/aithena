@@ -23,8 +23,8 @@ A modern Next.js web interface for the Ask Aithena chatbot system.
 1. Copy `.env.local` or create your own with the following variables:
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8000  # URL to your FastAPI backend
-NEXT_PUBLIC_RABBITMQ_WS_URL=ws://localhost:15674/ws  # WebSocket URL for RabbitMQ
+API_URL=http://localhost:8000  # URL to your FastAPI backend
+RABBITMQ_WS_URL=ws://localhost:15674/ws  # WebSocket URL for RabbitMQ
 ```
 
 ## Installation

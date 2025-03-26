@@ -19,10 +19,12 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
-import logfire
+from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.logfire_logger import logfire
 
-logfire.configure()
-logfire.instrument_openai()
+if USE_LOGFIRE:
+    logfire.configure()
+    logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
@@ -69,7 +71,7 @@ reranker_agent = Agent(
     model=model,
     system_prompt=RERANKER_AGENT_PROMPT,
     deps_type=RerankerDeps,
-    instrument=True,
+    instrument=USE_LOGFIRE,
     result_type=list[RerankedWork],
 )
 
@@ -327,7 +329,21 @@ async def call_reranker(
 
 async def rerank_context(query: str, context: Context) -> Context:
     """Rerank the context based on the query."""
-    with logfire.span("one_step_reranker"):
+    if USE_LOGFIRE:
+        with logfire.span("one_step_reranker"):
+            logger.info(f"One Step Reranking context for query: {query}")
+            logger.info(f"Context: {context.model_dump_json()}")
+            reranked_data = await reranker_agent.run(
+                "You are an expert reranker who's super careful",
+                deps=RerankerDeps(query=query, context=context),
+            )
+            logger.info(f"Reranked data: {reranked_data.data}")
+            reranker_inds = [x.index for x in reranked_data.data]
+            reranker_scores = [x.score for x in reranked_data.data]
+            context.reranked_indices = reranker_inds
+            context.reranked_scores = reranker_scores
+            return context
+    else:
         logger.info(f"One Step Reranking context for query: {query}")
         logger.info(f"Context: {context.model_dump_json()}")
         reranked_data = await reranker_agent.run(

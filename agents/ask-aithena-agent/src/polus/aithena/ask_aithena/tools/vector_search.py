@@ -8,6 +8,7 @@ from polus.aithena.ask_aithena.config import (
     SIMILARITY_N,
     EMBEDDING_TABLE,
 )
+from polus.aithena.ask_aithena.logfire_logger import logfire
 from polus.aithena.common.logger import get_logger
 from faststream.rabbit import RabbitBroker
 from polus.aithena.ask_aithena.rabbit import (
@@ -15,10 +16,9 @@ from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_queue,
     ProcessingStatus,
 )
-import logfire
+
 from typing import Optional
 
-logfire.configure()
 
 logger = get_logger(__name__)
 
@@ -48,7 +48,7 @@ def get_similar_works(text: str) -> list[dict]:
     emb = _embed_text(text)
     try:
         with httpx.Client() as client:
-            logfire.instrument_httpx(client, capture_headers=True)
+            logfire.instrument_httpx(client)
             response = client.post(
                 f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
                 json={"vector": emb, "n": SIMILARITY_N, "table_name": EMBEDDING_TABLE},
@@ -81,7 +81,7 @@ async def get_similar_works_async(
         )
     try:
         async with httpx.AsyncClient() as client:
-            logfire.instrument_httpx(client, capture_headers=True)
+            logfire.instrument_httpx(client)
             response = await client.post(
                 f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
                 json={"vector": emb, "n": similarity_n, "table_name": EMBEDDING_TABLE},
