@@ -55,6 +55,9 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                 // Create a map of reference indexes for quick lookup
                 const refMap = new Map(references.map(ref => [ref.index.toString(), ref]));
 
+                // A flag to track if any citations were processed
+                let citationsProcessed = false;
+
                 // Process text nodes within the content
                 const walkTextNodes = (node: Node) => {
                     if (node.nodeType === Node.TEXT_NODE) {
@@ -71,6 +74,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
 
                         while ((match = combinedRegex.exec(text)) !== null) {
                             hasChanges = true;
+                            citationsProcessed = true;
                             const fullMatch = match[0];  // e.g. "(1)" or "(1, 4, 9)"
                             const citationContent = match[1]; // e.g. "1" or "1, 4, 9"
                             const matchIndex = match.index;
@@ -85,6 +89,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                 // Grouped citation like (1, 4, 9)
                                 const groupSpan = document.createElement('span');
                                 groupSpan.className = 'citation-group';
+                                groupSpan.style.opacity = '1'; // Set initial opacity
 
                                 // Add opening parenthesis
                                 groupSpan.appendChild(document.createTextNode('('));
@@ -99,6 +104,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                     citationSpan.className = 'citation-ref';
                                     citationSpan.setAttribute('data-citation-id', num);
                                     citationSpan.textContent = num;
+                                    citationSpan.style.opacity = '1'; // Set initial opacity
 
                                     // Add hover/click events if we have a matching reference
                                     if (ref) {
@@ -128,6 +134,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                 citationSpan.className = 'citation-ref';
                                 citationSpan.setAttribute('data-citation-id', citationNumber);
                                 citationSpan.textContent = fullMatch;
+                                citationSpan.style.opacity = '1'; // Set initial opacity
 
                                 // Add hover events only if we have a matching reference
                                 const ref = refMap.get(citationNumber);
@@ -152,7 +159,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                             node.parentNode?.replaceChild(fragment, node);
                             return true;
                         }
-                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    } else {
                         // Don't process code blocks or pre elements
                         const element = node as HTMLElement;
                         if (element.tagName === 'CODE' || element.tagName === 'PRE') {
@@ -266,9 +273,80 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
             // Run our citation processor with a short delay to ensure content is rendered
             setTimeout(findAndProcessCitations, 100);
 
+            // Add listener for sidebar toggle to reprocess citations
+            const handleReprocessCitations = () => {
+                // Instead of removing and recreating all citation spans (which causes jerking),
+                // we'll use a more efficient approach
+                if (messageContentRef.current) {
+                    // First, make all citations temporarily invisible to prevent flickering
+                    const existingCitations = messageContentRef.current.querySelectorAll('.citation-ref, .citation-group');
+                    existingCitations.forEach(citation => {
+                        if (citation instanceof HTMLElement) {
+                            // Save original opacity to restore later
+                            citation.dataset.originalOpacity = citation.style.opacity || '1';
+                            // Fade out smoothly
+                            citation.style.transition = 'opacity 0.1s ease';
+                            citation.style.opacity = '0';
+                        }
+                    });
+
+                    // Wait for fade out to complete, then reprocess
+                    setTimeout(() => {
+                        // Now we can safely reprocess the citations
+                        // Store the scroll position to restore it later
+                        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+
+                        // Reset the HTML to remove citation spans
+                        existingCitations.forEach(citation => {
+                            const parent = citation.parentNode;
+                            if (parent && parent instanceof HTMLElement && parent.classList && parent.classList.contains('citation-group')) {
+                                // If this is in a citation group, replace the whole group with its text content
+                                const textContent = parent.textContent || '';
+                                const textNode = document.createTextNode(textContent);
+                                parent.parentNode?.replaceChild(textNode, parent);
+                            } else if (parent) {
+                                // Otherwise just replace the citation with its text content
+                                const textContent = citation.textContent || '';
+                                const textNode = document.createTextNode(textContent);
+                                parent.replaceChild(textNode, citation);
+                            }
+                        });
+
+                        // Re-run the citation processor
+                        findAndProcessCitations();
+
+                        // Restore scroll position to prevent page jump
+                        window.scrollTo({
+                            top: scrollTop,
+                            behavior: 'auto' // Use 'auto' to prevent animation
+                        });
+
+                        // Fade in the new citations
+                        setTimeout(() => {
+                            const newCitations = messageContentRef.current?.querySelectorAll('.citation-ref, .citation-group');
+                            if (newCitations) {
+                                newCitations.forEach(citation => {
+                                    if (citation instanceof HTMLElement) {
+                                        citation.style.transition = 'opacity 0.2s ease';
+                                        citation.style.opacity = '0';
+                                        // Trigger reflow
+                                        citation.offsetHeight;
+                                        // Fade in
+                                        citation.style.opacity = '1';
+                                    }
+                                });
+                            }
+                        }, 0);
+                    }, 100);
+                }
+            };
+
+            document.addEventListener('reprocessCitations', handleReprocessCitations);
+
             // Clean up when unmounting
             return () => {
                 removeTooltips();
+                document.removeEventListener('reprocessCitations', handleReprocessCitations);
             };
         }
     }, [mounted, references, isUser]);
@@ -411,9 +489,17 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                     cursor: pointer;
                                     font-weight: 600;
                                     position: relative;
-                                    transition: all 0.2s ease;
+                                    transition: all 0.3s ease;
                                     padding: 0 2px;
                                     border-radius: 3px;
+                                    opacity: 1;
+                                    will-change: opacity, background-color;
+                                }
+                                
+                                .citation-group {
+                                    display: inline;
+                                    transition: opacity 0.3s ease;
+                                    will-change: opacity;
                                 }
                                 
                                 .citation-ref:hover {
@@ -445,6 +531,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                     animation: tooltipFadeIn 0.2s ease-out;
                                     backdrop-filter: blur(8px);
                                     -webkit-backdrop-filter: blur(8px);
+                                    will-change: transform, opacity;
                                 }
                                 
                                 .details-reset summary {
@@ -577,7 +664,7 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                                                 <div className="text-gray-500 text-sm mt-1">
                                                                     <span className="text-gray-400">ID:</span>
                                                                     <a
-                                                                        href={`https://pubmed.ncbi.nlm.nih.gov/${ref.id}`}
+                                                                        href={ref.id.startsWith('http') ? ref.id : `https://${ref.id}`}
                                                                         className="ml-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
