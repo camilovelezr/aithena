@@ -14,6 +14,12 @@ export default function Home() {
 
     const toggleSidebar = () => {
         setSidebarOpen(prev => !prev);
+
+        // Dispatch a custom event to trigger citation reprocessing
+        // Use a longer delay to ensure the sidebar transition is well underway
+        setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('reprocessCitations'));
+        }, 100); // Increased from 10ms to 100ms
     };
 
     return (
