@@ -1,26 +1,24 @@
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm
 
 # environment variables
 ENV AITHENA_LOG_LEVEL="DEBUG"
 ENV EXEC_DIR="/opt/executables"
-ENV PROMPTS_DIR="/opt/executables/prompts"
-# Work directory defined in the base container
+
 WORKDIR ${EXEC_DIR}
 
-# TOOL_DIR Argument to the Dockerfile
-ARG TOOL_DIR="."
-
-# Create prompts directory
-RUN mkdir -p ${PROMPTS_DIR}
+# Set environment variables to avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Copy the repository into the container
-RUN mkdir aithena
-COPY $TOOL_DIR ${EXEC_DIR}/aithena/${TOOL_DIR}
+COPY agents/ask-aithena-agent ${EXEC_DIR}/aithena/agents/ask-aithena-agent/
 COPY common ${EXEC_DIR}/aithena/common
 
 # Install the tool
-RUN pip3 install "${EXEC_DIR}/aithena/${TOOL_DIR}"
+# RUN pip3 install "${EXEC_DIR}/aithena/agents/ask-aithena-agent"
+WORKDIR ${EXEC_DIR}/aithena/agents/ask-aithena-agent
+
+# Install
+RUN uv sync
 
 # Use the CLI command instead of direct uvicorn
-ENTRYPOINT ["ask-aithena", "serve", "--log-level", "DEBUG"]
-CMD ["--help"]
+ENTRYPOINT ["uv", "run", "ask-aithena", "serve", "--log-level", "DEBUG", "--host", "0.0.0.0", "--port", "8000"]

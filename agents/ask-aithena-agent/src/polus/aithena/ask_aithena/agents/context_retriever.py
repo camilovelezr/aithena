@@ -16,10 +16,11 @@ from polus.aithena.ask_aithena.tools.vector_search import (
 )
 from faststream.rabbit.broker import RabbitBroker
 from typing import Optional
-import logfire
+from polus.aithena.ask_aithena.logfire_logger import logfire
+from polus.aithena.ask_aithena.config import USE_LOGFIRE
 
-logfire.configure()
-logfire.instrument_openai()
+if USE_LOGFIRE:
+    logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
@@ -30,9 +31,30 @@ async def retrieve_context(
     broker: Optional[RabbitBroker] = None,
     session_id: Optional[str] = None,
 ) -> Context:
-    with logfire.span("context_retriever workflow"):
+    if USE_LOGFIRE:
+        with logfire.span("context_retriever workflow"):
+            logger.info(f"Running context retriever with query: {query}")
+            logger.info("Running semantic extractor")
+            semantics = await run_semantic_agent(query, broker, session_id)
+            await broker.publish(
+                ProcessingStatus(
+                    status="searching_for_works",
+                    message=f"Now I will search for works related to {semantics.data.sentence.lower()}...",
+                ).model_dump_json(),
+                exchange=ask_aithena_exchange,
+                queue=ask_aithena_queue,
+                routing_key=session_id,
+            )
+            logger.info("Running vector search")
+            works = await get_similar_works_async(
+                semantics.data.sentence, similarity_n, broker, session_id
+            )
+            logger.info("Creating context")
+            context = Context.from_works(works)
+            return context
+    else:
         logger.info(f"Running context retriever with query: {query}")
-        logger.info("Running semantic extracter")
+        logger.info("Running semantic extractor")
         semantics = await run_semantic_agent(query, broker, session_id)
         await broker.publish(
             ProcessingStatus(

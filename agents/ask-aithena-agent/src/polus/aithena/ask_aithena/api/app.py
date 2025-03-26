@@ -14,8 +14,9 @@ from polus.aithena.ask_aithena.config import (
     LOGFIRE_SERVICE_NAME,
     LOGFIRE_SERVICE_VERSION,
     LITELLM_URL,
+    USE_LOGFIRE,
+    RABBITMQ_URL,
 )
-from polus.aithena.ask_aithena.api.test import router as test_router
 from polus.aithena.ask_aithena.agents.context_retriever import retrieve_context
 from polus.aithena.ask_aithena.agents.responder import responder_agent
 from polus.aithena.ask_aithena.models import Context
@@ -28,12 +29,13 @@ from polus.aithena.ask_aithena.rabbit import (
 )
 from polus.aithena.ask_aithena.config import SIMILARITY_N
 
-import logfire
+from polus.aithena.ask_aithena.logfire_logger import logfire
 
-logfire.configure(
-    service_name=LOGFIRE_SERVICE_NAME,
-    service_version=LOGFIRE_SERVICE_VERSION,
-)
+if USE_LOGFIRE:
+    logfire.configure(
+        service_name=LOGFIRE_SERVICE_NAME,
+        service_version=LOGFIRE_SERVICE_VERSION,
+    )
 
 
 # Configure logging
@@ -50,7 +52,7 @@ logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-rabbit_router = RabbitRouter("amqp://guest:guest@localhost:5672/")
+rabbit_router = RabbitRouter(RABBITMQ_URL)
 
 
 def broker():
@@ -89,9 +91,6 @@ def create_application() -> FastAPI:
         allow_methods=["*"],  # Allows all methods
         allow_headers=["*"],  # Allows all headers
     )
-
-    # Include routers
-    app.include_router(test_router)
 
     # Add health check endpoint
     @app.get("/", tags=["health"])

@@ -4,12 +4,12 @@ metadata:
   name: litellm-config-pv
 spec:
   capacity:
-    storage: 1Gi
+    storage: 0.25Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
+    - ReadOnlyMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: standard
   hostPath:
-    path: "/data/litellm-config"
-    type: DirectoryOrCreate 
+    path: "/polus2/velezramirezc2/.data/litellm_config/config.yaml"
+    type: File

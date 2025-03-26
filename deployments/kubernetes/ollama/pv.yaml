@@ -4,12 +4,12 @@ metadata:
   name: ollama-models-pv
 spec:
   capacity:
-    storage: 20Gi
+    storage: 250Gi
   volumeMode: Filesystem
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: standard
   hostPath:
-    path: "/data/ollama"
+    path: "/polus2/velezramirezc2/.data/ollama_data"
     type: DirectoryOrCreate 

@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-load-balancer-microk8s-conf
+  namespace: ingress
+data:
+  config: |
+    worker_shutdown_timeout 600s;
+    
+    http {
+      client_header_timeout 600s;
+      client_body_timeout 600s;
+      proxy_connect_timeout 600s;
+      proxy_send_timeout 600s;
+      proxy_read_timeout 600s;
+      proxy_next_upstream_timeout 600s;
+      fastcgi_send_timeout 600s;
+      fastcgi_read_timeout 600s;
+      keepalive_timeout 600s;
+      
+      upstream upstream_balancer {
+        server 0.0.0.1:1234; # placeholder
+        keepalive_timeout 600s;
+      }
+      
+      server {
+        location / {
+          proxy_connect_timeout 600s;
+          proxy_send_timeout 600s;
+          proxy_read_timeout 600s;
+          proxy_next_upstream_timeout 600s;
+        }
+      }
+    }
+
+  # Connection timeouts
+  proxy-connect-timeout: "600"
+  proxy-read-timeout: "600"
+  proxy-send-timeout: "600"
+  client-header-timeout: "600"
+  client-body-timeout: "600"
+  keep-alive-timeout: "600"
+  
+  # Additional required configuration
+  proxy-body-size: "0"
+  proxy-buffering: "off"
+  
+  # Custom nginx configuration
+  http-snippet: |
+    client_header_timeout 600s;
+    client_body_timeout 600s;
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    fastcgi_send_timeout 600s;
+    fastcgi_read_timeout 600s;
+    
+  location-snippet: |
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    
+  main-snippet: |
+    worker_shutdown_timeout 600s;
+    
+  upstream-keepalive-timeout: "600"
+  proxy-next-upstream-timeout: "600s"
+  proxy-stream-timeout: "600s"
+  # Additional required nginx configuration
+  use-forwarded-headers: "true"
+  compute-full-forwarded-for: "true"
+  # Ensure configuration is picked up
+  configuration-snippet: |
+    proxy_connect_timeout 600s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    fastcgi_send_timeout 600s;
+    fastcgi_read_timeout 600s; 

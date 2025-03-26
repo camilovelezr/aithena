@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MessageItem from './MessageItem';
 import ProcessingStatusCard from './ProcessingStatusCard';
 import { useChatStore } from '@/store/chatStore';
-import { askAithena, parseStreamingResponse } from '@/services/api';
+import { askQuestion, parseStreamingResponse } from '@/services/api';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
@@ -162,7 +162,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             scrollToBottom();
 
             // Make API request with session ID
-            const response = await askAithena(currentQuery, mode, sessionIdRef.current);
+            const response = await askQuestion(currentQuery, mode, sessionIdRef.current);
 
             // Use parseStreamingResponse to handle the stream
             const streamParser = parseStreamingResponse(response);

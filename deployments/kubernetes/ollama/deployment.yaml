@@ -22,7 +22,16 @@ spec:
           mountPath: /root/.ollama
         resources:
           requests:
-            nvidia.com/gpu: "all"
+            nvidia.com/gpu: 6
+          limits:
+            nvidia.com/gpu: 6
+        env:
+        - name: OLLAMA_SCHED_SPREAD
+          value: "1"
+        - name: OLLAMA_DEBUG
+          value: "1"
+        - name: OLLAMA_FLASH_ATTENTION
+          value: "1"
         readinessProbe:
           httpGet:
             path: /api/tags

@@ -1,10 +1,8 @@
+'use client';
+
 import { AIMode } from '@/lib/types';
-import { API_URL } from '@/lib/env';
 import { useState, useEffect } from 'react';
 import { useSettings } from '@/lib/settings';
-
-// Define the base URL for the API
-const API_BASE_URL = API_URL;
 
 // API Health Status Interface
 export interface ApiHealthStatus {
@@ -17,23 +15,25 @@ export interface ApiHealthStatus {
 }
 
 // Function to ask the AI based on the selected mode
-export async function askAithena(query: string, mode: AIMode, sessionId: string): Promise<Response> {
-    const endpoint = `${API_BASE_URL}/${mode}/ask`;
+export async function askQuestion(query: string, mode: AIMode, sessionId: string): Promise<Response> {
+    try {
+        const response = await fetch('/api/ask', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query, mode, sessionId }),
+        });
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Session-ID': sessionId
-        },
-        body: JSON.stringify({ query })
-    });
+        if (!response.ok) {
+            throw new Error(`API request failed: ${response.statusText}`);
+        }
 
-    if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`);
+        return response;
+    } catch (error) {
+        console.error('Error asking question:', error);
+        throw error;
     }
-
-    return response;
 }
 
 // Parse streaming response
@@ -61,7 +61,7 @@ export async function* parseStreamingResponse(response: Response): AsyncGenerato
 // Health check function
 export async function checkApiHealth(): Promise<ApiHealthStatus> {
     try {
-        const response = await fetch(`${API_BASE_URL}/health`);
+        const response = await fetch('/api/health');
         if (!response.ok) {
             return { status: 'error', statusCode: response.status };
         }

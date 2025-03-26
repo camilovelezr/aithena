@@ -24,17 +24,17 @@ from pydantic_ai.settings import ModelSettings
 from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
 import openai
 from polus.aithena.common.logger import get_logger
-import logfire
 from faststream.rabbit import RabbitBroker
 from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_exchange,
     ask_aithena_queue,
     ProcessingStatus,
 )
+from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.logfire_logger import logfire
 
-
-logfire.configure()
-logfire.instrument_openai()
+if USE_LOGFIRE:
+    logfire.instrument_openai()
 
 logger = get_logger(__name__)
 
@@ -102,7 +102,7 @@ semantic_agent = Agent(
     model=model,
     system_prompt=MAIN_AGENT_PROMPT,
     result_type=SemanticAgentOutput,
-    instrument=True,
+    instrument=USE_LOGFIRE,
     model_settings=ModelSettings(
         temperature=SEMANTICS_TEMPERATURE,
     ),
@@ -149,66 +149,3 @@ async def run_semantic_agent(
     res = await semantic_agent.run(f"Q: {query}")
 
     return res
-
-
-# query_test = "What is the effect of national diversity on a team's success?"
-# query_test = "I am a molecular biologist interested in phylogenetic studies, are there any papers relating phylogenetics to cancer research?"
-# query_test = (
-#     "What is the effect of changing the temperature of an LLM on real time results?"
-# )
-
-
-# async def main():
-#     # Run setup first
-
-#     # Start the broker
-#     # First, test direct publication to see if it works
-
-#     # Then test extract_semantics to see if it works
-#     broker = RabbitBroker("amqp://guest:guest@localhost:5672/")
-#     await broker.start()
-#     await broker.publish(
-#         ProcessingStatus(
-#             query_id="123",
-#             timestamp=datetime.datetime.now().isoformat(),
-#             stage="analyzing_query",
-#             details={"query": query_test},
-#         ).model_dump_json(),
-#         queue="semantic-agent-status",
-#     )
-#     await extract_semantics(query_test)
-#     await broker.publish(
-#         ProcessingStatus(
-#             query_id="123",
-#             timestamp=datetime.datetime.now().isoformat(),
-#             stage="query_analysis_completed",
-#         ).model_dump_json(),
-#         queue="semantic-agent-status",
-#     )
-
-#     # Finally try the semantic agent
-#     await broker.publish(
-#         ProcessingStatus(
-#             query_id="123",
-#             timestamp=datetime.datetime.now().isoformat(),
-#             stage="extracting_semantics",
-#         ).model_dump_json(),
-#         queue="semantic-agent-status",
-#     )
-#     res = await semantic_agent.run(f"Q: {query_test}")
-#     await broker.publish(
-#         ProcessingStatus(
-#             query_id="123",
-#             timestamp=datetime.datetime.now().isoformat(),
-#             stage="semantic_agent_completed",
-#         ).model_dump_json(),
-#         queue="semantic-agent-status",
-#     )
-#     from pprint import pprint
-
-#     pprint(res)
-#     await broker.close()
-
-
-# if __name__ == "__main__":
-#     asyncio.run(main())

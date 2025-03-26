@@ -14,41 +14,41 @@ spec:
     spec:
       containers:
       - name: litellm
-        image: ghcr.io/berriai/litellm:main-latest
+        image: ghcr.io/berriai/litellm:main-v1.63.14-stable.patch1
         ports:
         - containerPort: 4000
         env:
         - name: DATABASE_URL
-          value: postgresql://$(LITELLM_DB_USER):$(LITELLM_DB_PASSWORD)@litellm-db:5432/litellm
+          value: postgresql://llmproxy:litellmpassword@litellm-db:5432/litellm
         - name: STORE_MODEL_IN_DB
           value: "True"
         - name: OLLAMA_HOST
           value: "http://ollama-service:11434"
-        - name: LITELLM_DB_USER
+        - name: AZURE_API_KEY
           valueFrom:
             secretKeyRef:
-              name: litellm-db-secret
-              key: username
-        - name: LITELLM_DB_PASSWORD
+              name: litellm-secret
+              key: AZURE_API_KEY
+        - name: AZURE_API_BASE
           valueFrom:
             secretKeyRef:
-              name: litellm-db-secret
-              key: password
+              name: litellm-secret
+              key: AZURE_API_BASE
         volumeMounts:
         - name: config-volume
           mountPath: /app/config.yaml
-          subPath: config.yaml
         args:
+        - "--port=4000"
         - "--config=/app/config.yaml"
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/readiness
             port: 4000
           initialDelaySeconds: 5
           periodSeconds: 10
         livenessProbe:
           httpGet:
-            path: /health
+            path: /health/liveness
             port: 4000
           initialDelaySeconds: 15
           periodSeconds: 20

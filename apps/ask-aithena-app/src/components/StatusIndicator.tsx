@@ -3,12 +3,14 @@
 import React, { FC } from 'react';
 import { motion } from 'framer-motion';
 import { StatusUpdate } from '@/lib/types';
+import { useEndpoints } from '@/lib/hooks/useEndpoints';
 
 interface StatusIndicatorProps {
     statusUpdates: StatusUpdate[];
     visible: boolean;
     compact?: boolean;
     showAll?: boolean;
+    showDebug?: boolean;
 }
 
 const statusLabels: Record<string, string> = {
@@ -26,8 +28,12 @@ const StatusIndicator: FC<StatusIndicatorProps> = ({
     statusUpdates,
     visible,
     compact = false,
-    showAll = false
+    showAll = false,
+    showDebug = false
 }) => {
+    const { endpoints } = useEndpoints();
+    const isDebug = process.env.NODE_ENV === 'development' && showDebug;
+
     if (!visible || statusUpdates.length === 0) return null;
 
     // Get the most recent status update for single display
@@ -36,7 +42,7 @@ const StatusIndicator: FC<StatusIndicatorProps> = ({
     const statusText = statusLabels[statusKey] || `Status: ${statusKey}`;
 
     // Development mode - show additional debug info
-    const isDebug = process.env.NODE_ENV === 'development';
+    const isDebugMode = process.env.NODE_ENV === 'development';
 
     // If showing all status updates (for debug panel)
     if (showAll) {
