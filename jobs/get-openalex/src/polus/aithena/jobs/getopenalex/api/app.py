@@ -1,30 +1,31 @@
 """FastAPI application for OpenAlex REST API operations."""
 
-from typing import Dict, List, Optional, Any
+import contextlib
 from datetime import datetime
+from typing import Any
 
-from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
+from fastapi import BackgroundTasks
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import os
+from pydantic import BaseModel
+from pydantic import Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from polus.aithena.common.logger import get_logger
-from polus.aithena.jobs.getopenalex import (
-    get_filtered_works_async,
-    WorksPaginator,
-    OpenAlexError,
-    RateLimitError,
-    APIError,
-)
-
-from polus.aithena.jobs.getopenalex.api.database import (
-    Database,
-    JobRepository,
-    JobType,
-    JobStatus,
-    Job as DBJob,
-)
+from polus.aithena.jobs.getopenalex import APIError
+from polus.aithena.jobs.getopenalex import OpenAlexError
+from polus.aithena.jobs.getopenalex import RateLimitError
+from polus.aithena.jobs.getopenalex import WorksPaginator
+from polus.aithena.jobs.getopenalex import get_filtered_works_async
+from polus.aithena.jobs.getopenalex.api.database import Database
+from polus.aithena.jobs.getopenalex.api.database import Job as DBJob
+from polus.aithena.jobs.getopenalex.api.database import JobRepository
+from polus.aithena.jobs.getopenalex.api.database import JobStatus
+from polus.aithena.jobs.getopenalex.api.database import JobType
 from polus.aithena.jobs.getopenalex.api.update import run_works_update
+from polus.aithena.jobs.getopenalex.config import USE_POSTGRES
 
 logger = get_logger(__name__)
 
@@ -33,10 +34,11 @@ db = Database()
 job_repo = JobRepository(db)
 
 # Create database tables
-try:
-    db.create_tables()
-except Exception as e:
-    logger.error(f"Error creating database tables: {str(e)}")
+with contextlib.suppress(SQLAlchemyError):
+    try:
+        db.create_tables()
+    except SQLAlchemyError as e:
+        logger.error(f"Error creating database tables: {e!s}")
 
 app = FastAPI(
     title="OpenAlex API",
@@ -58,20 +60,20 @@ app.add_middleware(
 class WorkSearchParams(BaseModel):
     """Parameters for searching works."""
 
-    query: Optional[str] = Field(None, description="Search query")
-    from_date: Optional[str] = Field(
-        None, description="From publication date (YYYY-MM-DD)"
+    query: str | None = Field(None, description="Search query")
+    from_date: str | None = Field(
+        None, description="From publication date (YYYY-MM-DD)",
     )
-    to_date: Optional[str] = Field(None, description="To publication date (YYYY-MM-DD)")
+    to_date: str | None = Field(None, description="To publication date (YYYY-MM-DD)")
     limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
     page: int = Field(1, description="Page number", ge=1)
     per_page: int = Field(10, description="Results per page", ge=1, le=100)
-    author_id: Optional[str] = Field(None, description="Filter by author ID")
-    institution_id: Optional[str] = Field(None, description="Filter by institution ID")
-    venue_id: Optional[str] = Field(None, description="Filter by venue ID")
-    concept_id: Optional[str] = Field(None, description="Filter by concept ID")
+    author_id: str | None = Field(None, description="Filter by author ID")
+    institution_id: str | None = Field(None, description="Filter by institution ID")
+    venue_id: str | None = Field(None, description="Filter by venue ID")
+    concept_id: str | None = Field(None, description="Filter by concept ID")
 
-    def to_filters(self) -> Dict[str, Any]:
+    def to_filters(self) -> dict[str, Any]:
         """Convert search parameters to OpenAlex API filters."""
         filters = {}
         if self.from_date:
@@ -93,11 +95,11 @@ class PaginatedResponse(BaseModel):
     """Base model for paginated responses."""
 
     count: int
-    next_page: Optional[int] = None
-    prev_page: Optional[int] = None
+    next_page: int | None = None
+    prev_page: int | None = None
     current_page: int
-    total_pages: Optional[int] = None
-    results: List[Dict[str, Any]]
+    total_pages: int | None = None
+    results: list[dict[str, Any]]
 
 
 class Job(BaseModel):
@@ -107,15 +109,15 @@ class Job(BaseModel):
     job_type: str
     status: str
     created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     records_processed: int = 0
     records_created: int = 0
     records_updated: int = 0
     records_failed: int = 0
-    parameters: Dict[str, Any] = {}
-    error_message: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    parameters: dict[str, Any] = {}
+    error_message: str | None = None
+    duration_seconds: float | None = None
 
     @classmethod
     def from_db_job(cls, db_job: DBJob) -> "Job":
@@ -141,10 +143,13 @@ class UpdateRequest(BaseModel):
     """Request to start a data update job."""
 
     job_type: str = Field(..., description="Type of update job")
-    from_date: Optional[str] = Field(
-        None, description="Start date for updates (YYYY-MM-DD)"
+    from_date: str | None = Field(
+        None, description="Start date for updates (YYYY-MM-DD)",
     )
-    max_records: Optional[int] = Field(None, description="Maximum records to process")
+    max_records: int | None = Field(None, description="Maximum records to process")
+    use_postgres: bool | None = Field(
+        None, description="Whether to store data in PostgreSQL",
+    )
 
 
 class JobLogEntry(BaseModel):
@@ -155,17 +160,19 @@ class JobLogEntry(BaseModel):
     timestamp: datetime
     level: str
     message: str
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
 
 # Routes
 @app.get("/")
-async def root():
+async def root() -> dict:
     """API root endpoint."""
     return {
         "name": "OpenAlex API",
         "version": "0.1.0",
-        "description": "API for querying OpenAlex academic data and managing database updates",
+        "description": (
+            "API for querying OpenAlex academic data and managing database updates"
+        ),
         "endpoints": [
             "/works",
             "/works/search",
@@ -181,28 +188,28 @@ async def root():
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict:
     """Health check endpoint."""
     return {"status": "ok"}
 
 
 @app.get("/works", response_model=PaginatedResponse)
 async def get_works(
-    query: Optional[str] = Query(None, description="Search query"),
-    from_date: Optional[str] = Query(
-        None, description="From publication date (YYYY-MM-DD)"
+    query: str | None = Query(None, description="Search query"),
+    from_date: str | None = Query(
+        None, description="From publication date (YYYY-MM-DD)",
     ),
-    to_date: Optional[str] = Query(
-        None, description="To publication date (YYYY-MM-DD)"
+    to_date: str | None = Query(
+        None, description="To publication date (YYYY-MM-DD)",
     ),
-    author_id: Optional[str] = Query(None, description="Filter by author ID"),
-    institution_id: Optional[str] = Query(None, description="Filter by institution ID"),
-    venue_id: Optional[str] = Query(None, description="Filter by venue ID"),
-    concept_id: Optional[str] = Query(None, description="Filter by concept ID"),
+    author_id: str | None = Query(None, description="Filter by author ID"),
+    institution_id: str | None = Query(None, description="Filter by institution ID"),
+    venue_id: str | None = Query(None, description="Filter by venue ID"),
+    concept_id: str | None = Query(None, description="Filter by concept ID"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Results per page"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
-):
+) -> PaginatedResponse:
     """Get works from OpenAlex with various filters."""
     search_params = WorkSearchParams(
         query=query,
@@ -231,7 +238,7 @@ async def get_works(
         results_page = await paginator.get_page_async()
         results = [work.model_dump() for work in results_page]
 
-        response = PaginatedResponse(
+        return PaginatedResponse(
             count=paginator.count if paginator.count else len(results),
             current_page=paginator.current_page,
             next_page=paginator.current_page + 1 if paginator.has_next else None,
@@ -242,28 +249,34 @@ async def get_works(
             results=results[:limit],  # Apply limit
         )
 
-        return response
-
     except RateLimitError as e:
-        logger.error(f"Rate limit exceeded: {str(e)}")
-        raise HTTPException(status_code=429, detail="OpenAlex rate limit exceeded")
+        logger.error(f"Rate limit exceeded: {e!s}")
+        raise HTTPException(
+            status_code=429, detail="OpenAlex rate limit exceeded",
+        ) from e
     except APIError as e:
-        logger.error(f"API error: {str(e)}")
-        raise HTTPException(status_code=502, detail=f"OpenAlex API error: {str(e)}")
+        logger.error(f"API error: {e!s}")
+        raise HTTPException(
+            status_code=502, detail=f"OpenAlex API error: {e!s}",
+        ) from e
     except OpenAlexError as e:
-        logger.error(f"OpenAlex error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OpenAlex error: {str(e)}")
+        logger.error(f"OpenAlex error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"OpenAlex error: {e!s}",
+        ) from e
     except Exception as e:
-        logger.exception(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred")
+        logger.exception(f"Unexpected error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail="Unexpected error occurred",
+        ) from e
 
 
 @app.post("/works/search", response_model=PaginatedResponse)
-async def search_works(search_params: WorkSearchParams):
+async def search_works(search_params: WorkSearchParams) -> PaginatedResponse:
     """Search for works with a request body."""
     filters = search_params.to_filters()
     logger.info(
-        f"Searching works with query='{search_params.query}' and filters={filters}"
+        f"Searching works with query='{search_params.query}' and filters={filters}",
     )
 
     try:
@@ -277,7 +290,7 @@ async def search_works(search_params: WorkSearchParams):
         results_page = await paginator.get_page_async()
         results = [work.model_dump() for work in results_page]
 
-        response = PaginatedResponse(
+        return PaginatedResponse(
             count=paginator.count if paginator.count else len(results),
             current_page=paginator.current_page,
             next_page=paginator.current_page + 1 if paginator.has_next else None,
@@ -288,24 +301,30 @@ async def search_works(search_params: WorkSearchParams):
             results=results[: search_params.limit],  # Apply limit
         )
 
-        return response
-
     except RateLimitError as e:
-        logger.error(f"Rate limit exceeded: {str(e)}")
-        raise HTTPException(status_code=429, detail="OpenAlex rate limit exceeded")
+        logger.error(f"Rate limit exceeded: {e!s}")
+        raise HTTPException(
+            status_code=429, detail="OpenAlex rate limit exceeded",
+        ) from e
     except APIError as e:
-        logger.error(f"API error: {str(e)}")
-        raise HTTPException(status_code=502, detail=f"OpenAlex API error: {str(e)}")
+        logger.error(f"API error: {e!s}")
+        raise HTTPException(
+            status_code=502, detail=f"OpenAlex API error: {e!s}",
+        ) from e
     except OpenAlexError as e:
-        logger.error(f"OpenAlex error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OpenAlex error: {str(e)}")
+        logger.error(f"OpenAlex error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"OpenAlex error: {e!s}",
+        ) from e
     except Exception as e:
-        logger.exception(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred")
+        logger.exception(f"Unexpected error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail="Unexpected error occurred",
+        ) from e
 
 
 @app.get("/works/{work_id}")
-async def get_work_by_id(work_id: str):
+async def get_work_by_id(work_id: str) -> dict:
     """Get a specific work by ID."""
     try:
         # Format the work ID if needed (e.g., adding prefix)
@@ -314,11 +333,13 @@ async def get_work_by_id(work_id: str):
         else:
             formatted_id = work_id
 
-        works = await get_filtered_works_async(filters={"id": formatted_id}, max_results=1)
+        works = await get_filtered_works_async(
+            filters={"id": formatted_id}, max_results=1,
+        )
 
         if not works:
             raise HTTPException(
-                status_code=404, detail=f"Work with ID {work_id} not found"
+                status_code=404, detail=f"Work with ID {work_id} not found",
             )
 
         return works[0].model_dump()
@@ -326,28 +347,36 @@ async def get_work_by_id(work_id: str):
     except HTTPException:
         raise
     except RateLimitError as e:
-        logger.error(f"Rate limit exceeded: {str(e)}")
-        raise HTTPException(status_code=429, detail="OpenAlex rate limit exceeded")
+        logger.error(f"Rate limit exceeded: {e!s}")
+        raise HTTPException(
+            status_code=429, detail="OpenAlex rate limit exceeded",
+        ) from e
     except APIError as e:
-        logger.error(f"API error: {str(e)}")
-        raise HTTPException(status_code=502, detail=f"OpenAlex API error: {str(e)}")
+        logger.error(f"API error: {e!s}")
+        raise HTTPException(
+            status_code=502, detail=f"OpenAlex API error: {e!s}",
+        ) from e
     except OpenAlexError as e:
-        logger.error(f"OpenAlex error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OpenAlex error: {str(e)}")
+        logger.error(f"OpenAlex error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"OpenAlex error: {e!s}",
+        ) from e
     except Exception as e:
-        logger.exception(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred")
+        logger.exception(f"Unexpected error: {e!s}")
+        raise HTTPException(
+            status_code=500, detail="Unexpected error occurred",
+        ) from e
 
 
 # Job management endpoints
-@app.get("/jobs", response_model=List[Job])
+@app.get("/jobs", response_model=list[Job])
 async def get_jobs(
-    status: Optional[str] = Query(None, description="Filter by job status"),
-    job_type: Optional[str] = Query(None, description="Filter by job type"),
+    status: str | None = Query(None, description="Filter by job status"),
+    job_type: str | None = Query(None, description="Filter by job type"),
     limit: int = Query(
-        10, ge=1, le=100, description="Maximum number of jobs to return"
+        10, ge=1, le=100, description="Maximum number of jobs to return",
     ),
-):
+) -> list[Job]:
     """Get a list of jobs."""
     try:
         if status:
@@ -355,31 +384,35 @@ async def get_jobs(
                 status_enum = JobStatus(status.upper())
                 jobs = job_repo.get_jobs_by_status(status_enum, limit=limit)
             except ValueError:
+                valid_statuses = ", ".join([s.value for s in JobStatus])
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid status: {status}. Valid values are: {', '.join([s.value for s in JobStatus])}",
-                )
+                    detail=f"Invalid status: {status}. Valid: {valid_statuses}",
+                ) from None
         elif job_type:
             try:
                 job_type_enum = JobType(job_type.upper())
                 jobs = job_repo.get_jobs_by_type(job_type_enum, limit=limit)
             except ValueError:
+                valid_types = ", ".join([t.value for t in JobType])
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid job type: {job_type}. Valid values are: {', '.join([t.value for t in JobType])}",
-                )
+                    detail=f"Invalid job type: {job_type}. Valid: {valid_types}",
+                ) from None
         else:
             jobs = job_repo.get_recent_jobs(limit=limit)
 
         return [Job.from_db_job(job) for job in jobs]
 
     except Exception as e:
-        logger.exception(f"Error retrieving jobs: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {str(e)}")
+        logger.exception(f"Error retrieving jobs: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving jobs: {e!s}",
+        ) from e
 
 
 @app.get("/jobs/{job_id}", response_model=Job)
-async def get_job(job_id: int):
+async def get_job(job_id: int) -> Job:
     """Get a specific job by ID."""
     job = job_repo.get_job(job_id)
     if not job:
@@ -387,8 +420,8 @@ async def get_job(job_id: int):
     return Job.from_db_job(job)
 
 
-@app.get("/jobs/{job_id}/logs", response_model=List[JobLogEntry])
-async def get_job_logs(job_id: int):
+@app.get("/jobs/{job_id}/logs", response_model=list[JobLogEntry])
+async def get_job_logs(job_id: int) -> list[JobLogEntry]:
     """Get logs for a specific job."""
     job = job_repo.get_job(job_id)
     if not job:
@@ -410,32 +443,43 @@ async def get_job_logs(job_id: int):
 
 # Update job endpoints
 def run_update_job_background(
-    job_type: str, from_date: Optional[str] = None, max_records: Optional[int] = None
-):
+    job_type: str,
+    from_date: str | None = None,
+    max_records: int | None = None,
+    use_postgres: bool | None = None,
+) -> None:
     """Run an update job in the background."""
     try:
         if job_type.upper() == JobType.WORKS_UPDATE.value:
-            run_works_update(from_date=from_date, max_records=max_records)
+            run_works_update(
+                from_date=from_date,
+                max_records=max_records,
+                use_postgres=use_postgres,
+            )
         else:
             logger.error(f"Unsupported job type: {job_type}")
     except Exception as e:
-        logger.exception(f"Error running update job: {str(e)}")
+        logger.exception(f"Error running update job: {e!s}")
 
 
 @app.post("/update", response_model=Job)
 async def start_update_job(
-    update_request: UpdateRequest, background_tasks: BackgroundTasks
-):
+    update_request: UpdateRequest, background_tasks: BackgroundTasks,
+) -> Job:
     """Start a data update job."""
     try:
         # Validate job type
         try:
             job_type_enum = JobType(update_request.job_type.upper())
         except ValueError:
+            valid_types = ", ".join([t.value for t in JobType])
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid job type: {update_request.job_type}. Valid values are: {', '.join([t.value for t in JobType])}",
-            )
+                detail=(
+                    f"Invalid job type: {update_request.job_type}. "
+                    f"Valid: {valid_types}"
+                ),
+            ) from None
 
         # Currently only supporting WORKS_UPDATE
         if job_type_enum != JobType.WORKS_UPDATE:
@@ -444,12 +488,20 @@ async def start_update_job(
                 detail=f"Currently only {JobType.WORKS_UPDATE.value} is supported",
             )
 
+        # Use explicit setting if provided, otherwise use the config default
+        use_postgres = (
+            update_request.use_postgres
+            if update_request.use_postgres is not None
+            else USE_POSTGRES
+        )
+
         # Create job
         job = job_repo.create_job(
             job_type=job_type_enum,
             parameters={
                 "from_date": update_request.from_date,
                 "max_records": update_request.max_records,
+                "use_postgres": use_postgres,
             },
         )
 
@@ -459,6 +511,7 @@ async def start_update_job(
             job_type=job_type_enum.value,
             from_date=update_request.from_date,
             max_records=update_request.max_records,
+            use_postgres=use_postgres,
         )
 
         return Job.from_db_job(job)
@@ -466,7 +519,7 @@ async def start_update_job(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error starting update job: {str(e)}")
+        logger.exception(f"Error starting update job: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"Error starting update job: {str(e)}"
-        )
+            status_code=500, detail=f"Error starting update job: {e!s}",
+        ) from e

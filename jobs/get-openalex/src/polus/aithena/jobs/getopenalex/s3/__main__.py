@@ -5,14 +5,14 @@ from datetime import date
 from pathlib import Path
 
 import typer
+
 from polus.aithena.common.logger import get_logger
 from polus.aithena.common.utils import init_dir
-from polus.aithena.jobs.getopenalex.config import (
-    S3_FROM_DATE,
-    S3_ALL_LAST_MONTH,
-    S3_OUTPUT_PATH,
-)
-from polus.aithena.jobs.getopenalex.s3.s3_types import SnapshotS3, TYPES
+from polus.aithena.jobs.getopenalex.config import S3_ALL_LAST_MONTH
+from polus.aithena.jobs.getopenalex.config import S3_FROM_DATE
+from polus.aithena.jobs.getopenalex.config import S3_OUTPUT_PATH
+from polus.aithena.jobs.getopenalex.s3.s3_types import TYPES
+from polus.aithena.jobs.getopenalex.s3.s3_types import SnapshotS3
 
 app = typer.Typer()
 
@@ -54,7 +54,7 @@ def download(
             valid_types = ", ".join(TYPES)
             logger.error(f"Invalid type: {only_type}. Valid types are: {valid_types}")
             raise ValueError(
-                f"Invalid type: {only_type}. Valid types are: {valid_types}"
+                f"Invalid type: {only_type}. Valid types are: {valid_types}",
             )
         logger.info(f"onlyType = {only_type}")
     else:
@@ -63,7 +63,7 @@ def download(
     snapshot = SnapshotS3()
     if only_type is not None:
         snapshot.download_all_of_type(
-            type_=only_type, output_path=out_dir, from_date=from_date
+            type_=only_type, output_path=out_dir, from_date=from_date,
         )
     else:
         snapshot.download_all(from_date=from_date, output_path=out_dir)
@@ -102,14 +102,14 @@ def list_available(
         dirs = snapshot.ls_dirs(type_, from_date=from_date)
         logger.info(f"Available {type_} snapshots from {from_date}:")
         for dir_ in dirs:
-            print(f"{dir_.type} - {dir_.date}")
+            logger.info(f"{dir_.type} - {dir_.date}")
     else:
         dirs_dict = snapshot.ls_dirs_dict(from_date=from_date)
         logger.info(f"Available snapshots from {from_date}:")
-        for type_, dirs in dirs_dict.items():
-            print(f"\n{type_} snapshots:")
-            for dir_ in dirs:
-                print(f"  {dir_.date}")
+        for type_, dirs_list in dirs_dict.items():  # Use dirs_list for clarity
+            logger.info(f"\n{type_} snapshots:")
+            for dir_ in dirs_list:
+                logger.info(f"  {dir_.date}")
 
 
 if __name__ == "__main__":

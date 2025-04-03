@@ -1,69 +1,45 @@
-"""OpenAlex REST API client modules.
+"""REST API client for OpenAlex data."""
 
-This package provides a modular interface for accessing the OpenAlex REST API.
-It includes pagination, caching, metrics collection, and other utilities.
-"""
+# Re-export key classes and functions from submodules
+from .common import MAX_RETRIES
+from .common import RATE_LIMIT_DELAY
+from .common import APIError
+from .common import OpenAlexError
+from .common import RateLimitError
+from .context import api_session
+from .context import async_api_session
 
-# Import and re-export functionality from common
-from .common import (
-    OpenAlexError,
-    RateLimitError,
-    APIError,
-    DEFAULT_TIMEOUT,
-    MAX_RETRIES,
-    RATE_LIMIT_DELAY,
-)
-
-# Import and re-export metrics functionality
+# Now import from get_works
+from .get_works import get_filtered_works
+from .get_works import get_filtered_works_async
+from .get_works import get_filtered_works_dict
+from .get_works import iter_filtered_works_async
+from .get_works import iter_filtered_works_cursor
+from .get_works import iter_filtered_works_offset
+from .get_works import pyalex_to_model
 from .metrics import metrics_collector
 
-# Import and re-export context managers
-from .context import api_session, async_api_session
+# Import from paginator first to avoid circular imports
+from .paginator import PaginatorOptions
+from .paginator import WorksPaginator
 
-# Import and re-export wrapper functions
-from .wrappers import with_metrics, with_retry
-
-# Import and re-export work functions
-from .get_works import (
-    get_filtered_works,
-    get_filtered_works_dict,
-    pyalex_to_model,
-    get_works_page,
-    get_filtered_works_async,
-    iter_filtered_works_cursor,
-    iter_filtered_works_offset,
-    iter_filtered_works_async,
-)
-
-# Import and re-export paginator classes
-from .paginator import PaginatorOptions, WorksPaginator
-
+# Define __all__ in sorted order directly
 __all__ = [
-    # Common
-    "OpenAlexError",
-    "RateLimitError",
-    "APIError",
-    "DEFAULT_TIMEOUT",
     "MAX_RETRIES",
     "RATE_LIMIT_DELAY",
-    # Metrics
-    "metrics_collector",
-    # Context managers
+    "APIError",
+    "OpenAlexError",
+    "PaginatorOptions",
+    "RateLimitError",
+    "WorksPaginator",
     "api_session",
     "async_api_session",
-    # Wrappers
-    "with_metrics",
-    "with_retry",
-    # Work functions
     "get_filtered_works",
-    "get_filtered_works_dict",
-    "pyalex_to_model",
-    "get_works_page",
     "get_filtered_works_async",
+    "get_filtered_works_dict",
+    "iter_filtered_works_async",
     "iter_filtered_works_cursor",
     "iter_filtered_works_offset",
-    "iter_filtered_works_async",
-    # Paginator
-    "PaginatorOptions",
-    "WorksPaginator",
+    "metrics_collector",
+    "pyalex_to_model",
 ]

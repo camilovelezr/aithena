@@ -1,3 +1,5 @@
+"""Command-line interface for the get-openalex tool."""
+
 import typer
 
 # Add this import for the API server
@@ -9,7 +11,7 @@ app.add_typer(s3_app, name="s3", help="S3 bucket operations")
 
 
 @app.command("version")
-def version():
+def version() -> None:
     """Display the current version of get-openalex."""
     from . import __version__
 
@@ -22,7 +24,7 @@ def serve(
     host: str = typer.Option("127.0.0.1", help="Host to bind the API server to"),
     port: int = typer.Option(8000, help="Port for the API server"),
     reload: bool = typer.Option(False, help="Enable auto-reload for development"),
-):
+) -> None:
     """Start the OpenAlex API server."""
     typer.echo(f"Starting API server at {host}:{port}")
     start_server(host=host, port=port, reload=reload)

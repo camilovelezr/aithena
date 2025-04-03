@@ -274,6 +274,92 @@ s3_app.callback()(
 )
 ```
 
+## 🖥️ API Server
+
+You can run a FastAPI server that provides an interface to the OpenAlex API and optionally stores data in PostgreSQL:
+
+### Environment Variables
+
+Key environment variables for the API server:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_HOST` | Host to bind the API server | `127.0.0.1` |
+| `API_PORT` | Port for the API server | `8000` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `PYALEX_EMAIL` | Email for OpenAlex API requests | `None` |
+| `POSTGRES_URL` | PostgreSQL connection string | `None` |
+| `USE_POSTGRES` | Whether to store data in PostgreSQL | `False` |
+| `JOB_DATABASE_URL` | SQLite database for job tracking | `sqlite:///./openalex_jobs.db` |
+| `UPDATE_BATCH_SIZE` | Batch size for update jobs | `100` |
+| `UPDATE_MAX_RECORDS` | Maximum records per update job | `10000` |
+
+### Starting the API Server
+
+Running the server directly:
+
+```shell
+# Start the API server
+python -m polus.aithena.jobs.getopenalex.api.run
+```
+
+### Docker Deployment
+
+Using Docker Compose:
+
+```shell
+# Start in the background
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f
+```
+
+### API Endpoints
+
+Key API endpoints:
+
+- `GET /works?query=<query>&from_date=<YYYY-MM-DD>` - Search for works
+- `GET /works/{work_id}` - Get a specific work by ID
+- `GET /health` - Health check endpoint
+- `GET /jobs` - List update jobs
+- `POST /update` - Start a data update job
+
+### PostgreSQL Integration (Optional)
+
+The API server can store data in PostgreSQL for persistence. This feature is **optional** and can be disabled if you don't need data storage.
+
+To enable PostgreSQL integration:
+
+1. Set `USE_POSTGRES=True` in your `.env` file
+2. Provide a valid `POSTGRES_URL` connection string
+
+If PostgreSQL integration is disabled:
+- The API will still function normally for queries
+- Update jobs will still run and count records but won't store data
+- All data will be fetched directly from OpenAlex on demand
+
+Example of starting an update job without PostgreSQL:
+
+```shell
+# Start the API server with PostgreSQL disabled
+export USE_POSTGRES=False
+python -m polus.aithena.jobs.getopenalex.api.run
+```
+
+Or via the API:
+
+```bash
+curl -X POST "http://localhost:8000/update" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_type": "WORKS_UPDATE", 
+    "from_date": "2023-01-01", 
+    "max_records": 1000,
+    "use_postgres": false
+  }'
+```
+
 ## 🖥️ FastAPI Server
 
 get-openalex includes a FastAPI server that provides a web API for querying OpenAlex data. This allows you to create a service that other applications can use to search and retrieve OpenAlex works.

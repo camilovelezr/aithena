@@ -4,25 +4,35 @@ This module provides functionality to sync a PostgreSQL database with
 data from the OpenAlex API. It includes incremental updates based on modification date.
 """
 
-from datetime import datetime, timedelta
-import os
-from typing import Dict, Optional, Any, Iterator
+from collections.abc import Iterator
+from datetime import datetime
+from datetime import timedelta
+from typing import Any
 
-from sqlmodel import Session, SQLModel, create_engine, select, col, Field
 from pydantic import BaseModel
 from sqlalchemy import JSON
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Field
+from sqlmodel import Session
+from sqlmodel import SQLModel
+from sqlmodel import col
+from sqlmodel import create_engine
+from sqlmodel import select
 
+from polus.aithena.common.logger import get_logger
 from polus.aithena.jobs.getopenalex import iter_filtered_works_cursor
-from polus.aithena.jobs.getopenalex.api.logging import JobLogger
-from polus.aithena.jobs.getopenalex.api.database import (
-    Database,
-    JobRepository,
-    JobType,
-    JobStatus,
-    Job,
-)
-from polus.aithena.jobs.getopenalex.config import POSTGRES_URL, UPDATE_BATCH_SIZE, UPDATE_MAX_RECORDS
+from polus.aithena.jobs.getopenalex.api.database import Database
+from polus.aithena.jobs.getopenalex.api.database import Job
+from polus.aithena.jobs.getopenalex.api.database import JobRepository
+from polus.aithena.jobs.getopenalex.api.database import JobStatus
+from polus.aithena.jobs.getopenalex.api.database import JobType
+from polus.aithena.jobs.getopenalex.api.logging_helpers import JobLogger
+from polus.aithena.jobs.getopenalex.config import POSTGRES_URL
+from polus.aithena.jobs.getopenalex.config import UPDATE_BATCH_SIZE
+from polus.aithena.jobs.getopenalex.config import UPDATE_MAX_RECORDS
+from polus.aithena.jobs.getopenalex.config import USE_POSTGRES
 
+logger = get_logger(__name__)
 
 # Default PostgreSQL connection string - should be overridden by environment variables
 DEFAULT_POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/openalex"
@@ -37,12 +47,12 @@ class WorkRecord(BaseModel):
 
     id: str
     title: str
-    publication_date: Optional[str] = None
-    doi: Optional[str] = None
-    updated_date: Optional[str] = None
+    publication_date: str | None = None
+    doi: str | None = None
+    updated_date: str | None = None
 
     @classmethod
-    def from_openalex(cls, work_data: Dict[str, Any]) -> "WorkRecord":
+    def from_openalex(cls, work_data: dict[str, Any]) -> "WorkRecord":
         """Create a WorkRecord from OpenAlex API data."""
         return cls(
             id=work_data.get("id", ""),
@@ -58,14 +68,38 @@ class OpenAlexDBUpdater:
 
     def __init__(
         self,
-        postgres_url: str = None,
-        job_db: Database = None,
-        batch_size: int = None,
-        max_records: int = None,
-    ):
+        postgres_url: str | None = None,
+        job_db: Database | None = None,
+        batch_size: int | None = None,
+        max_records: int | None = None,
+        use_postgres: bool | None = None,
+    ) -> None:
+        """Initialize the database updater."""
         # PostgreSQL connection
         self.postgres_url = postgres_url or POSTGRES_URL or DEFAULT_POSTGRES_URL
-        self.pg_engine = create_engine(self.postgres_url, echo=False)
+
+        # Whether to use PostgreSQL for updates
+        self.use_postgres = use_postgres if use_postgres is not None else USE_POSTGRES
+
+        # Initialize PostgreSQL engine if enabled
+        self.pg_engine = None
+        if self.use_postgres:
+            if not self.postgres_url:
+                logger.warning(
+                    "PostgreSQL URL is not set, disabling PostgreSQL updates",
+                )
+                self.use_postgres = False
+            else:
+                try:
+                    self.pg_engine = create_engine(self.postgres_url, echo=False)
+                    logger.info(
+                        f"PostgreSQL connection established at {self.postgres_url}",
+                    )
+                except SQLAlchemyError as e:
+                    logger.error(f"Failed to connect to PostgreSQL: {e!s}")
+                    self.use_postgres = False
+        else:
+            logger.info("PostgreSQL updates are disabled")
 
         # Job database
         self.job_db = job_db or Database()
@@ -78,39 +112,93 @@ class OpenAlexDBUpdater:
         # Ensure tables exist
         self._ensure_tables()
 
-    def _ensure_tables(self):
+    def _ensure_tables(self) -> None:
         """Ensure required tables exist in both databases."""
         # Job database tables
         self.job_db.create_tables()
 
-        # PostgreSQL tables - create if they don't exist
-        # Define models for the PostgreSQL database tables
-        class Work(SQLModel, table=True):
-            __tablename__ = "openalex_works"
+        # PostgreSQL tables - create if they don't exist and PostgreSQL is enabled
+        if self.use_postgres and self.pg_engine:
+            # Define models for the PostgreSQL database tables
+            class Work(SQLModel, table=True):
+                __tablename__ = "openalex_works"
 
-            id: str = Field(primary_key=True)
-            title: str
-            publication_date: Optional[str] = Field(default=None, index=True)
-            doi: Optional[str] = Field(default=None, index=True)
-            updated_date: Optional[str] = Field(default=None, index=True)
-            data: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
-            last_updated: datetime = Field(default_factory=datetime.now)
+                id: str = Field(primary_key=True)
+                title: str
+                publication_date: str | None = Field(default=None, index=True)
+                doi: str | None = Field(default=None, index=True)
+                updated_date: str | None = Field(default=None, index=True)
+                data: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+                last_updated: datetime = Field(default_factory=datetime.now)
 
-        # Create tables if they don't exist
-        SQLModel.metadata.create_all(self.pg_engine)
+            # Create tables if they don't exist
+            try:
+                SQLModel.metadata.create_all(self.pg_engine)
+                logger.info("PostgreSQL tables created or already exist")
+            except SQLAlchemyError as e:
+                logger.error(f"Failed to create PostgreSQL tables: {e!s}")
+                self.use_postgres = False
 
-    def _get_last_update_date(self) -> Optional[str]:
+    def _get_last_update_date(self) -> str | None:
         """Get the last update date from the job history."""
         last_job = self.job_repo.get_last_successful_job(JobType.WORKS_UPDATE)
         if last_job and last_job.parameters.get("from_date"):
             return last_job.parameters["from_date"]
 
         # Default to 7 days ago if no previous job
-        default_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-        return default_date
+        return (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    def _process_works_loop(
+        self, from_date: str, logger: JobLogger,
+    ) -> tuple[int, int, int, int]:
+        """Iterate through works and process them."""
+        processed = 0
+        created = 0
+        updated = 0
+        failed = 0
+
+        logger.info(f"Starting works update from {from_date}", from_date=from_date)
+        if not self.use_postgres:
+            logger.info(
+                "PostgreSQL updates are disabled, "
+                "job will only process and count records",
+            )
+
+        for work in self._iterate_works(from_date=from_date, logger=logger):
+            try:
+                if self.use_postgres:
+                    result = self._process_work(work)
+                    processed += 1
+                    if result == "created":
+                        created += 1
+                    elif result == "updated":
+                        updated += 1
+                else:
+                    processed += 1
+                    created += 1  # Mark all as "new" for counting
+
+                if processed % 100 == 0:
+                    logger.progress(
+                        current=processed,
+                        created=created,
+                        updated=updated,
+                        failed=failed,
+                    )
+
+                if processed >= self.max_records:
+                    logger.info(f"Reached maximum records limit ({self.max_records})")
+                    break
+
+            except Exception as e:  # noqa: BLE001
+                failed += 1
+                error_message = f"Error processing work: {e!s}"
+                work_id = work.get("id", "unknown")
+                logger.error(error_message, work_id=work_id)
+
+        return processed, created, updated, failed
 
     def update_works(
-        self, from_date: Optional[str] = None, job_id: Optional[int] = None
+        self, from_date: str | None = None, job_id: int | None = None,
     ) -> Job:
         """Update works in the database from the OpenAlex API.
 
@@ -144,58 +232,33 @@ class OpenAlexDBUpdater:
             job = self.job_repo.start_job(job.id)
             logger.start_job(from_date=from_date)
 
-            # Setup counters
-            processed = 0
-            created = 0
-            updated = 0
-            failed = 0
-
-            # Iterate through works
-            logger.info(f"Starting works update from {from_date}", from_date=from_date)
-
-            # Use cursor-based pagination to iterate through all matching works
-            # This is more efficient for large result sets
-            for work in self._iterate_works(from_date=from_date, logger=logger):
-                try:
-                    result = self._process_work(work)
-                    processed += 1
-
-                    if result == "created":
-                        created += 1
-                    elif result == "updated":
-                        updated += 1
-
-                    # Log progress periodically
-                    if processed % 100 == 0:
-                        logger.progress(
-                            current=processed,
-                            created=created,
-                            updated=updated,
-                            failed=failed,
-                        )
-
-                    # Check if we've reached the maximum
-                    if processed >= self.max_records:
-                        logger.info(
-                            f"Reached maximum records limit ({self.max_records})"
-                        )
-                        break
-
-                except Exception as e:
-                    failed += 1
-                    logger.error(f"Error processing work: {str(e)}", work_id=work.id)
-
-            # Complete job
-            status = JobStatus.COMPLETED
-            logger.info(
-                f"Works update completed: {processed} processed, {created} created, {updated} updated, {failed} failed",
-                processed=processed,
-                created=created,
-                updated=updated,
-                failed=failed,
+            # Process works
+            processed, created, updated, failed = self._process_works_loop(
+                from_date, logger,
             )
 
-        except Exception as e:
+            # Log completion summary
+            status = JobStatus.COMPLETED
+            if self.use_postgres:
+                logger.info(
+                    f"Works update completed: {processed} processed, "
+                    f"{created} created, "
+                    f"{updated} updated, {failed} failed",
+                    processed=processed,
+                    created=created,
+                    updated=updated,
+                    failed=failed,
+                )
+            else:
+                logger.info(
+                    f"Works counting completed (PostgreSQL disabled): "
+                    f"{processed} processed, "
+                    f"{failed} failed",
+                    processed=processed,
+                    failed=failed,
+                )
+
+        except Exception as e:  # noqa: BLE001
             # Handle job failure
             status = JobStatus.FAILED
             error_message = str(e)
@@ -224,8 +287,8 @@ class OpenAlexDBUpdater:
         )
 
     def _iterate_works(
-        self, from_date: str, logger: JobLogger
-    ) -> Iterator[Dict[str, Any]]:
+        self, from_date: str, logger: JobLogger,
+    ) -> Iterator[dict[str, Any]]:
         """Iterate through works from OpenAlex API.
 
         Args:
@@ -251,7 +314,7 @@ class OpenAlexDBUpdater:
             if i > 0 and i % 1000 == 0:
                 logger.info(f"Iterated through {i} works so far")
 
-    def _process_work(self, work_data: Dict[str, Any]) -> str:
+    def _process_work(self, work_data: dict[str, Any]) -> str:
         """Process a single work record.
 
         Args:
@@ -260,6 +323,10 @@ class OpenAlexDBUpdater:
         Returns:
             String indicating operation: 'created', 'updated', or 'skipped'
         """
+        # Skip if PostgreSQL is disabled
+        if not self.use_postgres or not self.pg_engine:
+            return "skipped"
+
         # Convert to a simplified record
         work_record = WorkRecord.from_openalex(work_data)
 
@@ -285,32 +352,32 @@ class OpenAlexDBUpdater:
                 session.add(existing_work)
                 session.commit()
                 return "updated"
-            else:
-                # Create new work
-                # Need to use raw SQL to insert due to dynamic table
-                from sqlalchemy import insert
+            # Create new work
+            # Need to use raw SQL to insert due to dynamic table
+            from sqlalchemy import insert
 
-                stmt = insert(SQLModel.metadata.tables["openalex_works"]).values(
-                    id=work_record.id,
-                    title=work_record.title,
-                    publication_date=work_record.publication_date,
-                    doi=work_record.doi,
-                    updated_date=work_record.updated_date,
-                    data=work_data,
-                    last_updated=datetime.now(),
-                )
-                session.execute(stmt)
-                session.commit()
-                return "created"
+            stmt = insert(SQLModel.metadata.tables["openalex_works"]).values(
+                id=work_record.id,
+                title=work_record.title,
+                publication_date=work_record.publication_date,
+                doi=work_record.doi,
+                updated_date=work_record.updated_date,
+                data=work_data,
+                last_updated=datetime.now(),
+            )
+            session.execute(stmt)
+            session.commit()
+            return "created"
 
 
 # Convenience function to run an update job
 def run_works_update(
-    from_date: Optional[str] = None,
-    postgres_url: Optional[str] = None,
-    job_db_url: Optional[str] = None,
-    batch_size: Optional[int] = None,
-    max_records: Optional[int] = None,
+    from_date: str | None = None,
+    postgres_url: str | None = None,
+    job_db_url: str | None = None,
+    batch_size: int | None = None,
+    max_records: int | None = None,
+    use_postgres: bool | None = None,
 ) -> Job:
     """Run a works update job.
 
@@ -320,6 +387,7 @@ def run_works_update(
         job_db_url: Job database connection URL
         batch_size: Number of records to process in a batch
         max_records: Maximum number of records to process
+        use_postgres: Whether to use PostgreSQL for updates (overrides config)
 
     Returns:
         The completed job record
@@ -333,6 +401,7 @@ def run_works_update(
         job_db=job_db,
         batch_size=batch_size,
         max_records=max_records,
+        use_postgres=use_postgres,
     )
 
     # Run update

@@ -1,20 +1,28 @@
 # mypy: disable-error-code="import-untyped"
 """Types for the OpenAlex S3 interface."""
-# pylint: disable=W1203, E1101, E0401
-import logging
-from datetime import date as Date
+# pylint: disable=W1203, E0401, E0611
+from datetime import date
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any
+from typing import Literal
+from typing import Union
 
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
-from polus.aithena.common.logger import get_logger
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import model_validator
 from pydantic.dataclasses import dataclass
 from tqdm import tqdm
 
+from polus.aithena.common.logger import get_logger
+
 logger = get_logger(__file__)
+
+S3_PREFIX_PARTS_EXPECTED = 4  # Expected number of parts in S3 prefix
 
 TYPES = [
     "works",
@@ -36,7 +44,7 @@ class S3Directory(BaseModel):
     """
 
     Prefix: str = Field(
-        ..., alias=AliasChoices("prefix", "name", "Prefix")  # type: ignore
+        ..., alias=AliasChoices("prefix", "name", "Prefix"),  # type: ignore
     )
     type: Literal[
         "works",
@@ -47,54 +55,71 @@ class S3Directory(BaseModel):
         "publishers",
         "sources",
     ]
-    date: Date
+    date: date
 
     @model_validator(mode="before")
-    def _from_prefix(self):
-        if not self["Prefix"].startswith("data/"):
-            raise ValueError(f"Prefix must start with 'data/': {self['Prefix']}")
-        parts = self["Prefix"].split("/")
-        if len(parts) != 4:
-            raise ValueError(f"Prefix must have 3 parts: {self['Prefix']}")
-        self["type"] = parts[1]
-        self["date"] = parts[2].split("=")[1]
-        return self
+    def _from_prefix(cls, values: dict[str, Any]) -> dict[str, Any]: # noqa
+        """Extract type and date from S3 prefix."""
+        prefix = values.get("Prefix")
+        if not prefix or not prefix.startswith("data/"):
+            raise ValueError(f"Prefix must start with 'data/': {prefix}")
+        parts = prefix.split("/")
+        if len(parts) != S3_PREFIX_PARTS_EXPECTED:
+            raise ValueError(
+                f"Prefix must have {S3_PREFIX_PARTS_EXPECTED - 1} parts after 'data/': "
+                f"{prefix}",
+            )
+        values["type"] = parts[1]
+        values["date"] = parts[2].split("=")[1]
+        return values
 
-    def __gt__(self, other: Union["S3Directory", Date, str]):
-        if isinstance(other, Date):
+    def __gt__(self, other: Union["S3Directory", date, str]) -> bool:
+        """Greater than comparison based on date."""
+        if isinstance(other, date):
             return self.date > other
         if isinstance(other, str):
-            return self.date > Date.fromisoformat(other)
+            return self.date > date.fromisoformat(other)
         if isinstance(other, S3Directory):
             return self.date > other.date
-        raise ValueError("other must be of type S3Directory, date, or str")
+        raise TypeError(
+            f"Unsupported comparison between S3Directory and {type(other).__name__}",
+        )
 
-    def __lt__(self, other: Union["S3Directory", Date, str]):
-        if isinstance(other, Date):
+    def __lt__(self, other: Union["S3Directory", date, str]) -> bool:
+        """Less than comparison based on date."""
+        if isinstance(other, date):
             return self.date < other
         if isinstance(other, str):
-            return self.date < Date.fromisoformat(other)
+            return self.date < date.fromisoformat(other)
         if isinstance(other, S3Directory):
             return self.date < other.date
-        raise ValueError("other must be of type S3Directory, date, or str")
+        raise TypeError(
+            f"Unsupported comparison between S3Directory and {type(other).__name__}",
+        )
 
-    def __ge__(self, other: Union["S3Directory", Date, str]):
-        if isinstance(other, Date):
+    def __ge__(self, other: Union["S3Directory", date, str]) -> bool:
+        """Greater than or equal comparison based on date."""
+        if isinstance(other, date):
             return self.date >= other
         if isinstance(other, str):
-            return self.date >= Date.fromisoformat(other)
+            return self.date >= date.fromisoformat(other)
         if isinstance(other, S3Directory):
             return self.date >= other.date
-        raise ValueError("other must be of type S3Directory, date, or str")
+        raise TypeError(
+            f"Unsupported comparison between S3Directory and {type(other).__name__}",
+        )
 
-    def __le__(self, other: Union["S3Directory", Date, str]):
-        if isinstance(other, Date):
+    def __le__(self, other: Union["S3Directory", date, str]) -> bool:
+        """Less than or equal comparison based on date."""
+        if isinstance(other, date):
             return self.date <= other
         if isinstance(other, str):
-            return self.date <= Date.fromisoformat(other)
+            return self.date <= date.fromisoformat(other)
         if isinstance(other, S3Directory):
             return self.date <= other.date
-        raise ValueError("other must be of type S3Directory, date, or str.")
+        raise TypeError(
+            f"Unsupported comparison between S3Directory and {type(other).__name__}",
+        )
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -103,7 +128,7 @@ class SnapshotS3:
 
     s3: boto3.session.Session = Field(
         default_factory=lambda: boto3.client(
-            "s3", config=Config(signature_version=UNSIGNED)
+            "s3", config=Config(signature_version=UNSIGNED),
         ),
         frozen=True,
     )
@@ -111,11 +136,11 @@ class SnapshotS3:
 
     def ls(
         self,
-        prefix: Optional[str] = None,
-        delimiter: Optional[str] = None,
+        prefix: str | None = None,
+        delimiter: str | None = None,
         names: bool = False,
-        **kwargs,
-    ) -> Any:
+        **kwargs: dict[str, Any],
+    ) -> dict[str, Any] | list[str]:
         """List objects in S3 bucket.
 
         If `names=True`, return only the names of the objects (files-dirs).
@@ -127,13 +152,14 @@ class SnapshotS3:
         response = self.s3.list_objects_v2(Bucket=self.bucket_name, **kwargs)
         if "Contents" not in response and names:
             logger.warning(f"Did not return any contents: {kwargs}, names={names}")
-            return response
+            return response # Return original response if no contents and names=True
         if names:
-            return [obj["Key"] for obj in response["Contents"]]
+            # Ensure 'Contents' exists before list comprehension
+            return [obj["Key"] for obj in response.get("Contents", [])]
         return response
 
     def ls_dirs(
-        self, type_: str, from_date: str | Date | None = None, **kwargs
+        self, type_: str, from_date: str | date | None = None, **kwargs: dict[str, Any],
     ) -> list[S3Directory]:
         """List directories in S3 bucket."""
         logger.debug(f"Listing directories for {type_}, from_date={from_date}")
@@ -143,27 +169,27 @@ class SnapshotS3:
             logger.error(f"Failed to list directories for {type_}")
             logger.debug(f"Response: {res}")
             raise ValueError(f"Failed to list directories for {type_}")
-        ls = [S3Directory(**dir) for dir in cp]
-        logger.debug(f"Found {len(ls)} directories for {type_} before filtering")
+        s3_dirs = [S3Directory(**common_prefix) for common_prefix in cp]
+        logger.debug(f"Found {len(s3_dirs)} directories for {type_} before filtering")
         if from_date is not None:
-            return [d for d in ls if d >= from_date]
-        return ls
+            return [d for d in s3_dirs if d >= from_date]
+        return s3_dirs
 
     def ls_dirs_dict(
-        self, from_date: str | Date | None = None, **kwargs
+        self, from_date: str | date | None = None, **kwargs: dict[str, Any],
     ) -> dict[str, list[S3Directory]]:
         """List directories in S3 bucket as a dictionary."""
-        res = {}
+        result_dict = {}
         for tp in TYPES:
-            res[tp] = self.ls_dirs(tp, from_date=from_date, **kwargs)
-        return res
+            result_dict[tp] = self.ls_dirs(tp, from_date=from_date, **kwargs)
+        return result_dict
 
     def download_dir(
-        self, name: S3Directory, output_path: str | Path, return_list: bool = False
-    ) -> Any:
+        self, name: S3Directory, output_path: str | Path, return_list: bool = False,
+    ) -> Path | list[Path]:
         """Download directory from S3 - Recursive.
 
-        If `return_list=True`, return a list of `SnapshotGZ` to the downloaded files.
+        If `return_list=True`, return a list of Paths to the downloaded files.
         """
         outdir = Path(output_path)
         files_ = self.ls(prefix=name.Prefix, names=True)
@@ -192,41 +218,43 @@ class SnapshotS3:
         self,
         type_: str,
         output_path: str | Path,
-        from_date: str | Date | None = None,
+        from_date: str | date | None = None,
         return_list: bool = False,
-    ) -> Any:
+    ) -> Path | list[Path]:
         """Download all files of a specific OpenAlex type from S3 - Recursively."""
-        dirs = self.ls_dirs(type_, from_date=from_date)
+        s3_dirs = self.ls_dirs(type_, from_date=from_date)
         logger.info(
-            f"Downloading {type_} to {output_path}, found {len(dirs)} directories"
+            f"Downloading {type_} to {output_path}, found {len(s3_dirs)} directories",
         )
         out_dir_full = Path(output_path).joinpath(type_)
         out_dir_full.mkdir(parents=True, exist_ok=True)
         if return_list:
             path_list = []
-        for dir_ in tqdm(dirs):
+        for s3_dir in tqdm(s3_dirs):
             if return_list:
-                path_list.extend(
-                    self.download_dir(dir_, out_dir_full, return_list=True)
-                )
+                downloaded = self.download_dir(s3_dir, out_dir_full, return_list=True)
+                if isinstance(downloaded, list): # Ensure it's a list before extending
+                    path_list.extend(downloaded)
             else:
-                self.download_dir(dir_, out_dir_full)
+                self.download_dir(s3_dir, out_dir_full)
         if return_list:
             return path_list
-        return output_path
+        return path_list if return_list else output_path
 
     def download_all(
         self,
         output_path: str | Path,
-        from_date: str | Date | None = None,
+        from_date: str | date | None = None,
         return_list: bool = False,
-    ) -> Any:
+    ) -> Path | dict[str, list[Path]]:
         """Download all files from S3 - Recursively."""
-        res = {}
+        result_data: dict[str, list[Path]] = {}
         for tp in TYPES:
-            res[tp] = self.download_all_of_type(
-                tp, output_path, from_date=from_date, return_list=return_list
+            downloaded = self.download_all_of_type(
+                tp, output_path, from_date=from_date, return_list=return_list,
             )
+            if return_list and isinstance(downloaded, list):
+                result_data[tp] = downloaded
         if return_list:
-            return res
-        return output_path
+            return result_data
+        return Path(output_path)

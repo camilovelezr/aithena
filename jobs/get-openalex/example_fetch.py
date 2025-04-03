@@ -1,27 +1,28 @@
+"""Example script for fetching OpenAlex works asynchronously."""
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+import traceback
+from typing import Any
 
+from polus.aithena.jobs.getopenalex.oa_rest.api_direct import PyalexWork
+from polus.aithena.jobs.getopenalex.oa_rest.api_direct import Works
+from polus.aithena.jobs.getopenalex.oa_rest.api_direct import _process_work
 from polus.aithena.jobs.getopenalex.oa_rest.api_direct import (
-    async_api_session,
-    Works,
-    _process_work,
     _validate_pagination_params,
-    PyalexWork,
 )
+from polus.aithena.jobs.getopenalex.oa_rest.api_direct import async_api_session
 
 # Set up logging to see more details
 logging.basicConfig(level=logging.INFO)
 
 
 async def get_openalex_works_async(
-    filters: Dict[str, Any],
+    filters: dict[str, Any],
     per_page: int = 25,
-    max_results: Optional[int] = None,
+    max_results: int | None = None,
     convert_to_model: bool = True,
-):
-    """
-    Asynchronously get works from OpenAlex API.
+) -> list[PyalexWork | dict]:
+    """Asynchronously get works from OpenAlex API.
 
     This fixed implementation handles the current API response format
     which returns a list of works directly instead of a dictionary with metadata.
@@ -69,10 +70,7 @@ async def get_openalex_works_async(
             break
 
         # Process next page items with proper slicing for remaining items
-        if remaining is not None:
-            next_page_slice = next_page[:remaining]
-        else:
-            next_page_slice = next_page
+        next_page_slice = next_page[:remaining] if remaining is not None else next_page
 
         page_items = [
             _process_work(PyalexWork(item), convert_to_model)
@@ -98,13 +96,11 @@ async def get_openalex_works_async(
     return all_works
 
 
-async def main():
-    """
-    Main function to demonstrate retrieving works from OpenAlex.
-    """
+async def main() -> None:
+    """Main function to demonstrate retrieving works from OpenAlex."""
     try:
         async with async_api_session():
-            print("Fetching works...")
+            logging.info("Fetching works...")
 
             # Using a working filter format
             works = await get_openalex_works_async(
@@ -113,8 +109,8 @@ async def main():
                 max_results=20,
             )
 
-            print(f"\nRetrieved {len(works)} works:")
-            for i, work in enumerate(works[:10]):  # Show first 10 only
+            logging.info(f"\nRetrieved {len(works)} works:")
+            for _, work in enumerate(works[:10]):  # Show first 10 only
                 # Safely get title attribute from either dict or object
                 if hasattr(work, "title"):
                     # It's a Work object
@@ -126,11 +122,9 @@ async def main():
                     # Unknown format
                     title = str(work)
 
-                print(f"- {title}")
-    except Exception as e:
-        print(f"Error occurred: {e}")
-        import traceback
-
+                logging.info(f"- {title}")
+    except RuntimeError as e:  # Catch a more specific error if possible
+        logging.error(f"Error occurred: {e}")
         traceback.print_exc()
 
 

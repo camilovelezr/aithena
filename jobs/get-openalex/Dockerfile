@@ -1,37 +1,25 @@
-# syntax=docker/dockerfile:1
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm
 
-WORKDIR /app
+ENV EXEC_DIR="/opt/executables"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libpq-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR ${EXEC_DIR}
 
-# Install poetry
-RUN pip install --no-cache-dir poetry==1.6.1
+# Set environment variables to avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Copy project files
-COPY pyproject.toml poetry.lock* README.md ./
-COPY src ./src
-
-# Configure poetry and install dependencies
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --extras api
+COPY jobs/get-openalex ${EXEC_DIR}/aithena/jobs/get-openalex
+COPY common ${EXEC_DIR}/aithena/common
 
 # Create data directory for SQLite
-RUN mkdir -p /app/data /app/logs
-
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV JOB_DATABASE_URL=sqlite:////app/data/openalex_jobs.db
-ENV OPENALEX_POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/openalex
+RUN mkdir -p ${EXEC_DIR}/data ${EXEC_DIR}/logs
+# Install CA certificates
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
 # Expose API port
 EXPOSE 8000
 
+WORKDIR ${EXEC_DIR}/aithena/jobs/get-openalex
+RUN uv sync
+
 # Run API
-CMD ["uvicorn", "polus.aithena.jobs.getopenalex.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "src/polus/aithena/jobs/getopenalex/api/run.py"]
