@@ -72,10 +72,16 @@ class WorkSearchParams(BaseModel):
     institution_id: str | None = Field(None, description="Filter by institution ID")
     venue_id: str | None = Field(None, description="Filter by venue ID")
     concept_id: str | None = Field(None, description="Filter by concept ID")
+    doi: str | None = Field(None, description="Filter by DOI")
+    pmcid: str | None = Field(
+        None, description="Filter by PubMed Central ID (pmcid)",
+    )
+    pmid: str | None = Field(None, description="Filter by PubMed ID (pmid)")
 
     def to_filters(self) -> dict[str, Any]:
         """Convert search parameters to OpenAlex API filters."""
-        filters = {}
+        filters: dict[str, Any] = {}
+
         if self.from_date:
             filters["from_publication_date"] = self.from_date
         if self.to_date:
@@ -88,6 +94,13 @@ class WorkSearchParams(BaseModel):
             filters["host_venue.id"] = self.venue_id
         if self.concept_id:
             filters["concepts.id"] = self.concept_id
+        if self.doi:
+            filters["doi"] = self.doi
+        if self.pmid:
+            filters["pmid"] = self.pmid
+        if self.pmcid:
+            filters["pmcid"] = self.pmcid
+
         return filters
 
 
@@ -206,6 +219,11 @@ async def get_works(
     institution_id: str | None = Query(None, description="Filter by institution ID"),
     venue_id: str | None = Query(None, description="Filter by venue ID"),
     concept_id: str | None = Query(None, description="Filter by concept ID"),
+    doi: str | None = Query(None, description="Filter by DOI"),
+    pmcid: str | None = Query(
+        None, description="Filter by PubMed Central ID (pmcid)",
+    ),
+    pmid: str | None = Query(None, description="Filter by PubMed ID (pmid)"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Results per page"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
@@ -219,6 +237,9 @@ async def get_works(
         institution_id=institution_id,
         venue_id=venue_id,
         concept_id=concept_id,
+        doi=doi,
+        pmcid=pmcid,
+        pmid=pmid,
         page=page,
         per_page=per_page,
         limit=limit,
