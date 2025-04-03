@@ -1,6 +1,7 @@
 """S3 interface for the OpenAlex REST API."""
 
-from .s3_types import SnapshotS3, S3Directory
 from .__main__ import app
+from .s3_types import S3Directory
+from .s3_types import SnapshotS3
 
-__all__ = ["SnapshotS3", "S3Directory", "app"]
+__all__ = ["S3Directory", "SnapshotS3", "app"]

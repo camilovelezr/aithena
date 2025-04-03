@@ -4,14 +4,19 @@ This module provides SQLModel models and database interaction utilities
 for tracking job execution history and metadata.
 """
 
-from datetime import datetime, timedelta
+import contextlib
+from datetime import datetime
 from enum import Enum
-import os
-from typing import Optional, List, Dict, Any, Union
-from uuid import uuid4
+from pathlib import Path
+from typing import Any
 
-from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, select
 from sqlalchemy import JSON
+from sqlmodel import Field
+from sqlmodel import Relationship
+from sqlmodel import Session
+from sqlmodel import SQLModel
+from sqlmodel import create_engine
+from sqlmodel import select
 
 from polus.aithena.common.logger import get_logger
 from polus.aithena.jobs.getopenalex.config import JOB_DATABASE_URL
@@ -50,12 +55,12 @@ class JobType(str, Enum):
 class Job(SQLModel, table=True):
     """Job execution metadata for tracking updates."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     job_type: JobType = Field(index=True)
     status: JobStatus = Field(default=JobStatus.PENDING, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    started_at: Optional[datetime] = Field(default=None)
-    completed_at: Optional[datetime] = Field(default=None)
+    started_at: datetime | None = Field(default=None)
+    completed_at: datetime | None = Field(default=None)
 
     # Update statistics
     records_processed: int = Field(default=0)
@@ -64,21 +69,21 @@ class Job(SQLModel, table=True):
     records_failed: int = Field(default=0)
 
     # Additional metadata
-    parameters: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
-    error_message: Optional[str] = Field(default=None)
+    parameters: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+    error_message: str | None = Field(default=None)
 
     # Relationships
-    job_logs: List["JobLog"] = Relationship(back_populates="job")
+    job_logs: list["JobLog"] = Relationship(back_populates="job")
 
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Calculate job duration in seconds."""
         if self.started_at and self.completed_at:
             return (self.completed_at - self.started_at).total_seconds()
         return None
 
     @property
-    def success_rate(self) -> Optional[float]:
+    def success_rate(self) -> float | None:
         """Calculate job success rate."""
         total = self.records_processed
         if total > 0:
@@ -89,12 +94,12 @@ class Job(SQLModel, table=True):
 class JobLog(SQLModel, table=True):
     """Detailed log entry for job execution."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     job_id: int = Field(foreign_key="job.id", index=True)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     level: str = Field(default="INFO")
     message: str
-    details: Dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+    details: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
 
     # Relationship
     job: Job = Relationship(back_populates="job_logs")
@@ -104,7 +109,8 @@ class JobLog(SQLModel, table=True):
 class Database:
     """Database connection and session management."""
 
-    def __init__(self, database_url: str = None):
+    def __init__(self, database_url: str | None = None) -> None:
+        """Initialize the database connection."""
         # Use provided URL, config setting, or default
         self.database_url = database_url or JOB_DATABASE_URL or DEFAULT_DATABASE_URL
 
@@ -112,7 +118,8 @@ class Database:
         if self.database_url.startswith("sqlite:///"):
             db_path = self.database_url.replace("sqlite:///", "")
             if db_path.startswith("/"):  # Absolute path
-                os.makedirs(os.path.dirname(db_path), exist_ok=True)
+                with contextlib.suppress(FileExistsError):
+                    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Create engine with appropriate configurations
         connect_args = {}
@@ -120,11 +127,11 @@ class Database:
             connect_args = {"check_same_thread": False}
 
         self.engine = create_engine(
-            self.database_url, echo=False, connect_args=connect_args
+            self.database_url, echo=False, connect_args=connect_args,
         )
         logger.info(f"Initialized database connection to {self.database_url}")
 
-    def create_tables(self):
+    def create_tables(self) -> None:
         """Create all defined tables in the database."""
         SQLModel.metadata.create_all(self.engine)
         logger.info("Database tables created")
@@ -138,10 +145,13 @@ class Database:
 class JobRepository:
     """Data access layer for job metadata."""
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database) -> None:
+        """Initialize the job repository."""
         self.db = db
 
-    def create_job(self, job_type: JobType, parameters: Dict[str, Any] = None) -> Job:
+    def create_job(
+        self, job_type: JobType, parameters: dict[str, Any] | None = None,
+    ) -> Job:
         """Create a new job record."""
         with self.db.get_session() as session:
             job = Job(
@@ -153,16 +163,16 @@ class JobRepository:
             session.commit()
             session.refresh(job)
             logger.info(
-                f"Created new job", extra={"job_id": job.id, "job_type": job_type}
+                "Created new job", extra={"job_id": job.id, "job_type": job_type},
             )
             return job
 
-    def get_job(self, job_id: int) -> Optional[Job]:
+    def get_job(self, job_id: int) -> Job | None:
         """Get a job by ID."""
         with self.db.get_session() as session:
             return session.get(Job, job_id)
 
-    def start_job(self, job_id: int) -> Optional[Job]:
+    def start_job(self, job_id: int) -> Job | None:
         """Mark a job as started."""
         with self.db.get_session() as session:
             job = session.get(Job, job_id)
@@ -173,7 +183,7 @@ class JobRepository:
                 session.commit()
                 session.refresh(job)
                 logger.info(
-                    f"Started job", extra={"job_id": job.id, "job_type": job.job_type}
+                    "Started job", extra={"job_id": job.id, "job_type": job.job_type},
                 )
             return job
 
@@ -185,8 +195,8 @@ class JobRepository:
         records_created: int = 0,
         records_updated: int = 0,
         records_failed: int = 0,
-        error_message: str = None,
-    ) -> Optional[Job]:
+        error_message: str | None = None,
+    ) -> Job | None:
         """Mark a job as completed."""
         with self.db.get_session() as session:
             job = session.get(Job, job_id)
@@ -203,7 +213,7 @@ class JobRepository:
                 session.commit()
                 session.refresh(job)
                 logger.info(
-                    f"Completed job",
+                    "Completed job",
                     extra={
                         "job_id": job.id,
                         "job_type": job.job_type,
@@ -219,7 +229,7 @@ class JobRepository:
         job_id: int,
         message: str,
         level: str = "INFO",
-        details: Dict[str, Any] = None,
+        details: dict[str, Any] | None = None,
     ) -> JobLog:
         """Add a log entry for a job."""
         with self.db.get_session() as session:
@@ -234,47 +244,49 @@ class JobRepository:
             session.refresh(log)
             return log
 
-    def get_job_logs(self, job_id: int) -> List[JobLog]:
+    def get_job_logs(self, job_id: int) -> list[JobLog]:
         """Get all logs for a job."""
         with self.db.get_session() as session:
             return session.exec(
-                select(JobLog).where(JobLog.job_id == job_id).order_by(JobLog.timestamp)
+                select(JobLog)
+                .where(JobLog.job_id == job_id)
+                .order_by(JobLog.timestamp),
             ).all()
 
-    def get_recent_jobs(self, limit: int = 10) -> List[Job]:
+    def get_recent_jobs(self, limit: int = 10) -> list[Job]:
         """Get the most recent jobs."""
         with self.db.get_session() as session:
             return session.exec(
-                select(Job).order_by(Job.created_at.desc()).limit(limit)
+                select(Job).order_by(Job.created_at.desc()).limit(limit),
             ).all()
 
-    def get_jobs_by_status(self, status: JobStatus, limit: int = 100) -> List[Job]:
+    def get_jobs_by_status(self, status: JobStatus, limit: int = 100) -> list[Job]:
         """Get jobs by status."""
         with self.db.get_session() as session:
             return session.exec(
                 select(Job)
                 .where(Job.status == status)
                 .order_by(Job.created_at.desc())
-                .limit(limit)
+                .limit(limit),
             ).all()
 
-    def get_jobs_by_type(self, job_type: JobType, limit: int = 100) -> List[Job]:
+    def get_jobs_by_type(self, job_type: JobType, limit: int = 100) -> list[Job]:
         """Get jobs by type."""
         with self.db.get_session() as session:
             return session.exec(
                 select(Job)
                 .where(Job.job_type == job_type)
                 .order_by(Job.created_at.desc())
-                .limit(limit)
+                .limit(limit),
             ).all()
 
-    def get_last_successful_job(self, job_type: JobType) -> Optional[Job]:
+    def get_last_successful_job(self, job_type: JobType) -> Job | None:
         """Get the last successful job of a specific type."""
         with self.db.get_session() as session:
             jobs = session.exec(
                 select(Job)
                 .where(Job.job_type == job_type, Job.status == JobStatus.COMPLETED)
                 .order_by(Job.completed_at.desc())
-                .limit(1)
+                .limit(1),
             ).all()
             return jobs[0] if jobs else None

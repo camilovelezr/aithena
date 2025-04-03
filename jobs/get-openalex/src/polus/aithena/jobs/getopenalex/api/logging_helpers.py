@@ -9,21 +9,16 @@ import logging
 import sys
 import time
 from datetime import datetime
-from typing import Optional
+from logging import INFO
 
 # Standard log levels
 TRACE = 5
-DEBUG = logging.DEBUG
-INFO = logging.INFO
-WARNING = logging.WARNING
-ERROR = logging.ERROR
-CRITICAL = logging.CRITICAL
-
 
 class StructuredLogFormatter(logging.Formatter):
     """Format logs as JSON for better processing in container environments."""
 
-    def __init__(self, service_name: str = "openalex-api"):
+    def __init__(self, service_name: str = "openalex-api") -> None:
+        """Initialize the JSON formatter."""
         super().__init__()
         self.service_name = service_name
 
@@ -77,7 +72,9 @@ class StructuredLogFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
-def configure_logging(service_name: str = "openalex-api", level: int = INFO):
+def configure_logging(
+    service_name: str = "openalex-api", level: int = INFO,
+) -> logging.Logger:
     """Configure logging for containerized environments.
 
     Args:
@@ -104,7 +101,9 @@ def configure_logging(service_name: str = "openalex-api", level: int = INFO):
     return root_logger
 
 
-def get_logger(name: str, service_name: str = "openalex-api", level: int = INFO):
+def get_logger(
+    name: str, service_name: str = "openalex-api", level: int = INFO,
+) -> logging.Logger:
     """Get a configured logger with the given name.
 
     Args:
@@ -125,16 +124,17 @@ class JobLogger:
     def __init__(
         self,
         job_name: str,
-        job_id: Optional[str] = None,
+        job_id: str | None = None,
         service_name: str = "openalex-update",
-    ):
+    ) -> None:
+        """Initialize the job logger."""
         self.logger = get_logger(f"job.{job_name}", service_name)
         self.job_name = job_name
         self.job_id = job_id or int(time.time())
         self.start_time = None
         self.end_time = None
 
-    def start_job(self, **kwargs):
+    def start_job(self, **kwargs: object) -> None:
         """Log job start with custom attributes."""
         self.start_time = time.time()
         self.logger.info(
@@ -147,7 +147,7 @@ class JobLogger:
             },
         )
 
-    def end_job(self, status: str = "success", **kwargs):
+    def end_job(self, status: str = "success", **kwargs: object) -> None:
         """Log job completion with timing information."""
         self.end_time = time.time()
         duration = (
@@ -166,7 +166,9 @@ class JobLogger:
             },
         )
 
-    def progress(self, current: int, total: Optional[int] = None, **kwargs):
+    def progress(
+        self, current: int, total: int | None = None, **kwargs: object,
+    ) -> None:
         """Log job progress."""
         progress_pct = round((current / total) * 100, 1) if total else None
 
@@ -184,26 +186,26 @@ class JobLogger:
             },
         )
 
-    def info(self, message: str, **kwargs):
+    def info(self, message: str, **kwargs: object) -> None:
         """Log an info message with job context."""
         self.logger.info(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs}
+            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
-    def error(self, message: str, **kwargs):
+    def error(self, message: str, **kwargs: object) -> None:
         """Log an error message with job context."""
         self.logger.error(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs}
+            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, **kwargs: object) -> None:
         """Log a warning message with job context."""
         self.logger.warning(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs}
+            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
-    def debug(self, message: str, **kwargs):
+    def debug(self, message: str, **kwargs: object) -> None:
         """Log a debug message with job context."""
         self.logger.debug(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs}
+            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
