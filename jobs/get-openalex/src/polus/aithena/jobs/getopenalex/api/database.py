@@ -127,7 +127,9 @@ class Database:
             connect_args = {"check_same_thread": False}
 
         self.engine = create_engine(
-            self.database_url, echo=False, connect_args=connect_args,
+            self.database_url,
+            echo=False,
+            connect_args=connect_args,
         )
         logger.info(f"Initialized database connection to {self.database_url}")
 
@@ -150,7 +152,9 @@ class JobRepository:
         self.db = db
 
     def create_job(
-        self, job_type: JobType, parameters: dict[str, Any] | None = None,
+        self,
+        job_type: JobType,
+        parameters: dict[str, Any] | None = None,
     ) -> Job:
         """Create a new job record."""
         with self.db.get_session() as session:
@@ -163,7 +167,8 @@ class JobRepository:
             session.commit()
             session.refresh(job)
             logger.info(
-                "Created new job", extra={"job_id": job.id, "job_type": job_type},
+                "Created new job",
+                extra={"job_id": job.id, "job_type": job_type},
             )
             return job
 
@@ -183,7 +188,8 @@ class JobRepository:
                 session.commit()
                 session.refresh(job)
                 logger.info(
-                    "Started job", extra={"job_id": job.id, "job_type": job.job_type},
+                    "Started job",
+                    extra={"job_id": job.id, "job_type": job.job_type},
                 )
             return job
 

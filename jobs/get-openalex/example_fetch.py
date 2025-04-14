@@ -1,4 +1,5 @@
 """Example script for fetching OpenAlex works asynchronously."""
+
 import asyncio
 import logging
 import traceback

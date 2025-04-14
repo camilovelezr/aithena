@@ -73,7 +73,8 @@ API_REQUEST_TIMEOUT = int(os.getenv("API_REQUEST_TIMEOUT", "30"))
 # Maximum retries for API requests
 API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
 
-logger.debug(f"""
+logger.debug(
+    f"""
              Initiliazed get-openalex config with:
              S3_ALL_LAST_MONTH={S3_ALL_LAST_MONTH},
              S3_OUTPUT_PATH={S3_OUTPUT_PATH},
@@ -88,4 +89,5 @@ logger.debug(f"""
              USE_POSTGRES={USE_POSTGRES},
              JOB_DATABASE_URL={JOB_DATABASE_URL},
              API_REQUEST_TIMEOUT={API_REQUEST_TIMEOUT},
-             API_MAX_RETRIES={API_MAX_RETRIES}, OPENALEX_API_KEY={OPENALEX_API_KEY}""")
+             API_MAX_RETRIES={API_MAX_RETRIES}, OPENALEX_API_KEY={OPENALEX_API_KEY}"""
+)

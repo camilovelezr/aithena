@@ -63,7 +63,9 @@ def download(
     snapshot = SnapshotS3()
     if only_type is not None:
         snapshot.download_all_of_type(
-            type_=only_type, output_path=out_dir, from_date=from_date,
+            type_=only_type,
+            output_path=out_dir,
+            from_date=from_date,
         )
     else:
         snapshot.download_all(from_date=from_date, output_path=out_dir)

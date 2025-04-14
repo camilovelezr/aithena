@@ -44,7 +44,8 @@ class S3Directory(BaseModel):
     """
 
     Prefix: str = Field(
-        ..., alias=AliasChoices("prefix", "name", "Prefix"),  # type: ignore
+        ...,
+        alias=AliasChoices("prefix", "name", "Prefix"),  # type: ignore
     )
     type: Literal[
         "works",
@@ -58,7 +59,7 @@ class S3Directory(BaseModel):
     date: date
 
     @model_validator(mode="before")
-    def _from_prefix(cls, values: dict[str, Any]) -> dict[str, Any]: # noqa
+    def _from_prefix(cls, values: dict[str, Any]) -> dict[str, Any]:  # noqa
         """Extract type and date from S3 prefix."""
         prefix = values.get("Prefix")
         if not prefix or not prefix.startswith("data/"):
@@ -128,7 +129,8 @@ class SnapshotS3:
 
     s3: boto3.session.Session = Field(
         default_factory=lambda: boto3.client(
-            "s3", config=Config(signature_version=UNSIGNED),
+            "s3",
+            config=Config(signature_version=UNSIGNED),
         ),
         frozen=True,
     )
@@ -152,14 +154,17 @@ class SnapshotS3:
         response = self.s3.list_objects_v2(Bucket=self.bucket_name, **kwargs)
         if "Contents" not in response and names:
             logger.warning(f"Did not return any contents: {kwargs}, names={names}")
-            return response # Return original response if no contents and names=True
+            return response  # Return original response if no contents and names=True
         if names:
             # Ensure 'Contents' exists before list comprehension
             return [obj["Key"] for obj in response.get("Contents", [])]
         return response
 
     def ls_dirs(
-        self, type_: str, from_date: str | date | None = None, **kwargs: dict[str, Any],
+        self,
+        type_: str,
+        from_date: str | date | None = None,
+        **kwargs: dict[str, Any],
     ) -> list[S3Directory]:
         """List directories in S3 bucket."""
         logger.debug(f"Listing directories for {type_}, from_date={from_date}")
@@ -176,7 +181,9 @@ class SnapshotS3:
         return s3_dirs
 
     def ls_dirs_dict(
-        self, from_date: str | date | None = None, **kwargs: dict[str, Any],
+        self,
+        from_date: str | date | None = None,
+        **kwargs: dict[str, Any],
     ) -> dict[str, list[S3Directory]]:
         """List directories in S3 bucket as a dictionary."""
         result_dict = {}
@@ -185,7 +192,10 @@ class SnapshotS3:
         return result_dict
 
     def download_dir(
-        self, name: S3Directory, output_path: str | Path, return_list: bool = False,
+        self,
+        name: S3Directory,
+        output_path: str | Path,
+        return_list: bool = False,
     ) -> Path | list[Path]:
         """Download directory from S3 - Recursive.
 
@@ -233,7 +243,7 @@ class SnapshotS3:
         for s3_dir in tqdm(s3_dirs):
             if return_list:
                 downloaded = self.download_dir(s3_dir, out_dir_full, return_list=True)
-                if isinstance(downloaded, list): # Ensure it's a list before extending
+                if isinstance(downloaded, list):  # Ensure it's a list before extending
                     path_list.extend(downloaded)
             else:
                 self.download_dir(s3_dir, out_dir_full)
@@ -251,7 +261,10 @@ class SnapshotS3:
         result_data: dict[str, list[Path]] = {}
         for tp in TYPES:
             downloaded = self.download_all_of_type(
-                tp, output_path, from_date=from_date, return_list=return_list,
+                tp,
+                output_path,
+                from_date=from_date,
+                return_list=return_list,
             )
             if return_list and isinstance(downloaded, list):
                 result_data[tp] = downloaded

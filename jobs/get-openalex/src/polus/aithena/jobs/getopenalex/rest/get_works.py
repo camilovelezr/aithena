@@ -44,8 +44,9 @@ HTTP_OK = http.HTTPStatus.OK
 HTTP_TOO_MANY_REQUESTS = http.HTTPStatus.TOO_MANY_REQUESTS
 
 # Configure pyalex email and timeout using values from config.py
-pyalex.config.email = PYALEX_EMAIL # Use PYALEX_EMAIL directly from config
-pyalex.config.timeout = API_REQUEST_TIMEOUT # Use API_REQUEST_TIMEOUT from config
+pyalex.config.email = PYALEX_EMAIL  # Use PYALEX_EMAIL directly from config
+pyalex.config.timeout = API_REQUEST_TIMEOUT  # Use API_REQUEST_TIMEOUT from config
+
 
 @lru_cache(maxsize=128)
 def get_filtered_works(
@@ -82,13 +83,19 @@ def get_filtered_works(
         if cursor_based:
             results = list(
                 iter_filtered_works_cursor(
-                    filters, per_page, max_results, convert_to_model,
+                    filters,
+                    per_page,
+                    max_results,
+                    convert_to_model,
                 ),
             )
         else:
             results = list(
                 iter_filtered_works_offset(
-                    filters, per_page, max_results, convert_to_model,
+                    filters,
+                    per_page,
+                    max_results,
+                    convert_to_model,
                 ),
             )
 
@@ -380,7 +387,10 @@ async def get_filtered_works_async(
         async with asyncio.timeout(timeout):
             works = []
             async for work in iter_filtered_works_async(
-                filters, per_page, max_results, convert_to_model,
+                filters,
+                per_page,
+                max_results,
+                convert_to_model,
             ):
                 works.append(work)
 
@@ -532,7 +542,12 @@ async def get_filtered_works_dict_async(
     """
     base_url = "https://api.openalex.org/works"
     params = _build_async_dict_params(
-        filters, page, per_page, cursor, api_key, search,
+        filters,
+        page,
+        per_page,
+        cursor,
+        api_key,
+        search,
     )
 
     # Log the request (without API key)
@@ -551,12 +566,16 @@ async def get_filtered_works_dict_async(
 
             try:
                 async with session.get(
-                    base_url, params=params, timeout=timeout,
+                    base_url,
+                    params=params,
+                    timeout=timeout,
                 ) as response:
                     if response.status == HTTP_TOO_MANY_REQUESTS:
                         # Handle rate limiting
                         metrics_collector.record_request(
-                            time.time() - start_time, success=False, rate_limited=True,
+                            time.time() - start_time,
+                            success=False,
+                            rate_limited=True,
                         )
                         logger.warning(
                             "Rate limit exceeded in async call to OpenAlex API",
@@ -568,27 +587,29 @@ async def get_filtered_works_dict_async(
                         # Handle other HTTP errors
                         error_text = await response.text()
                         metrics_collector.record_request(
-                            time.time() - start_time, success=False,
+                            time.time() - start_time,
+                            success=False,
                         )
                         logger.error(
                             f"OpenAlex API error: {response.status} - {error_text}",
                         )
                         err_msg = (
-                            f"API status {response.status}: "
-                            f"{error_text[:60]}..."
+                            f"API status {response.status}: " f"{error_text[:60]}..."
                         )
                         raise APIError(err_msg)
 
                     # Parse JSON response
                     result = await response.json()
                     metrics_collector.record_request(
-                        time.time() - start_time, success=True,
+                        time.time() - start_time,
+                        success=True,
                     )
                     return result
 
             except TimeoutError as e:
                 metrics_collector.record_request(
-                    time.time() - start_time, success=False,
+                    time.time() - start_time,
+                    success=False,
                 )
                 msg = f"Timeout after {API_REQUEST_TIMEOUT}s in async call"
                 logger.error(msg)

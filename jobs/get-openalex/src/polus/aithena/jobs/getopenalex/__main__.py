@@ -38,13 +38,21 @@ def version() -> None:
 def search_works(
     query: str = typer.Option(..., "--query", "-q", help="Search query for works"),
     from_date: str | None = typer.Option(
-        None, "--from-date", help="Filter by publication date (YYYY-MM-DD)",
+        None,
+        "--from-date",
+        help="Filter by publication date (YYYY-MM-DD)",
     ),
     limit: int = typer.Option(
-        10, "--limit", "-l", help="Maximum number of results to return",
+        10,
+        "--limit",
+        "-l",
+        help="Maximum number of results to return",
     ),
     output_format: str = typer.Option(
-        "text", "--format", "-f", help="Output format: text, json, csv",
+        "text",
+        "--format",
+        "-f",
+        help="Output format: text, json, csv",
     ),
 ) -> None:
     """Search for works using the OpenAlex REST API."""
