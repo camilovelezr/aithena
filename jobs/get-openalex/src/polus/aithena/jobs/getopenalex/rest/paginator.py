@@ -44,10 +44,12 @@ class PaginatorOptions(BaseModel):
     async_enabled: bool = False
     collect_metrics: bool = True
     strict_mode: bool = False  # Whether to strictly enforce model validation
+    raw: bool = False  # Whether to return raw PyalexWork objects
 
     model_config = ConfigDict(
         extra="forbid",  # Prevent extra fields
     )
+
 
 # Define a helper function to convert PyalexWork to Work model
 def pyalex_to_model(work: PyalexWork) -> Work:
@@ -92,7 +94,7 @@ class WorksPaginator(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Private attribute for query - won't be included in serialization
-    _query: Works | None = None # Use Optional for clarity
+    _query: Works | None = None  # Use Optional for clarity
 
     def __init__(self, **data: dict[str, Any]) -> None:
         """Initialize the WorksPaginator."""
@@ -162,6 +164,16 @@ class WorksPaginator(BaseModel):
         return self.options.collect_metrics
 
     @property
+    def strict_mode(self) -> bool:
+        """Access strict_mode from options."""
+        return self.options.strict_mode
+
+    @property
+    def raw(self) -> bool:
+        """Access raw from options."""
+        return self.options.raw
+
+    @property
     def total_pages(self) -> int | None:
         """Calculate the total number of pages based on the count and per_page.
 
@@ -185,11 +197,17 @@ class WorksPaginator(BaseModel):
 
         if self.cursor_based:
             yield from iter_filtered_works_cursor(
-                self.filters, self.per_page, self.max_results, self.convert_to_model,
+                self.filters,
+                self.per_page,
+                self.max_results,
+                self.convert_to_model,
             )
         else:
             yield from iter_filtered_works_offset(
-                self.filters, self.per_page, self.max_results, self.convert_to_model,
+                self.filters,
+                self.per_page,
+                self.max_results,
+                self.convert_to_model,
             )
 
     async def iter_async(self) -> AsyncIterator[Work | PyalexWork]:
@@ -202,7 +220,10 @@ class WorksPaginator(BaseModel):
         from .get_works import iter_filtered_works_async
 
         async for work in iter_filtered_works_async(
-            self.filters, self.per_page, self.max_results, self.convert_to_model,
+            self.filters,
+            self.per_page,
+            self.max_results,
+            self.convert_to_model,
         ):
             yield work
 
@@ -215,9 +236,10 @@ class WorksPaginator(BaseModel):
         if self.cursor_based:
             # Use the paginate method for cursor-based pagination
             for page in self.query.paginate(
-                per_page=self.per_page, n_max=self.max_results,
+                per_page=self.per_page,
+                n_max=self.max_results,
             ):
-                if self.convert_to_model:
+                if self.convert_to_model and not self.raw:  # Check raw flag
                     yield [pyalex_to_model(work) for work in page]
                 else:
                     yield page
@@ -237,7 +259,7 @@ class WorksPaginator(BaseModel):
                     ):
                         break
 
-                    if self.convert_to_model:
+                    if self.convert_to_model and not self.raw:  # Check raw flag
                         page_items = [
                             pyalex_to_model(PyalexWork(work))
                             for work in results["results"]
@@ -259,7 +281,7 @@ class WorksPaginator(BaseModel):
                     # Respect rate limits
                     time.sleep(RATE_LIMIT_DELAY)
 
-                except APIError as e: # Catch specific APIError
+                except APIError as e:  # Catch specific APIError
                     logger.error(f"Error in paginator at page {page_num}: {e}")
                     raise APIError(f"Pagination error at page {page_num}: {e!s}") from e
 
@@ -301,7 +323,9 @@ class WorksPaginator(BaseModel):
         return params
 
     async def _make_async_request(
-        self, params: dict[str, Any], timeout: float,
+        self,
+        params: dict[str, Any],
+        timeout: float,
     ) -> dict[str, Any]:
         """Make the asynchronous HTTP request."""
         url = "https://api.openalex.org/works"
@@ -316,7 +340,8 @@ class WorksPaginator(BaseModel):
                 return await response.json()
 
     def _process_async_response(
-        self, result: dict[str, Any],
+        self,
+        result: dict[str, Any],
     ) -> list[Work | PyalexWork]:
         """Process the JSON response from the async request."""
         # Update pagination info
@@ -336,7 +361,7 @@ class WorksPaginator(BaseModel):
         processed_results = []
         for work_data in result.get("results", []):
             work = PyalexWork(work_data)
-            if self.convert_to_model:
+            if self.convert_to_model and not self.raw:  # Check raw flag
                 try:
                     work = pyalex_to_model(work)
                 except (ValidationError, TypeError, ValueError) as e:
