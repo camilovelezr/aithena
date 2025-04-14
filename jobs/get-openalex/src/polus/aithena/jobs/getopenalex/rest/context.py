@@ -39,7 +39,8 @@ def api_session(collect_metrics: bool = True) -> Iterator[None]:
 
 @contextlib.asynccontextmanager
 async def async_api_session(
-    collect_metrics: bool = True, timeout: float | None = None,
+    collect_metrics: bool = True,
+    timeout: float | None = None,
 ) -> AsyncIterator[aiohttp.ClientSession]:
     """Async context manager for API sessions with optional metrics collection.
 

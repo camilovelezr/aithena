@@ -73,7 +73,9 @@ def with_retry(func: Callable[..., T]) -> Callable[..., T]:
                 return func(*args, **kwargs)
             # Catch both httpx errors (for async) and requests errors (for sync pyalex)
             except (
-                httpx.HTTPError, requests.exceptions.RequestException, APIError,
+                httpx.HTTPError,
+                requests.exceptions.RequestException,
+                APIError,
             ) as e:
                 wait_time = 2**retries
                 logger.warning(

@@ -149,7 +149,9 @@ class OpenAlexDBUpdater:
         return (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
 
     def _process_works_loop(
-        self, from_date: str, logger: JobLogger,
+        self,
+        from_date: str,
+        logger: JobLogger,
     ) -> tuple[int, int, int, int]:
         """Iterate through works and process them."""
         processed = 0
@@ -198,7 +200,9 @@ class OpenAlexDBUpdater:
         return processed, created, updated, failed
 
     def update_works(
-        self, from_date: str | None = None, job_id: int | None = None,
+        self,
+        from_date: str | None = None,
+        job_id: int | None = None,
     ) -> Job:
         """Update works in the database from the OpenAlex API.
 
@@ -234,7 +238,8 @@ class OpenAlexDBUpdater:
 
             # Process works
             processed, created, updated, failed = self._process_works_loop(
-                from_date, logger,
+                from_date,
+                logger,
             )
 
             # Log completion summary
@@ -287,7 +292,9 @@ class OpenAlexDBUpdater:
         )
 
     def _iterate_works(
-        self, from_date: str, logger: JobLogger,
+        self,
+        from_date: str,
+        logger: JobLogger,
     ) -> Iterator[dict[str, Any]]:
         """Iterate through works from OpenAlex API.
 

@@ -14,6 +14,7 @@ from logging import INFO
 # Standard log levels
 TRACE = 5
 
+
 class StructuredLogFormatter(logging.Formatter):
     """Format logs as JSON for better processing in container environments."""
 
@@ -73,7 +74,8 @@ class StructuredLogFormatter(logging.Formatter):
 
 
 def configure_logging(
-    service_name: str = "openalex-api", level: int = INFO,
+    service_name: str = "openalex-api",
+    level: int = INFO,
 ) -> logging.Logger:
     """Configure logging for containerized environments.
 
@@ -102,7 +104,9 @@ def configure_logging(
 
 
 def get_logger(
-    name: str, service_name: str = "openalex-api", level: int = INFO,
+    name: str,
+    service_name: str = "openalex-api",
+    level: int = INFO,
 ) -> logging.Logger:
     """Get a configured logger with the given name.
 
@@ -167,7 +171,10 @@ class JobLogger:
         )
 
     def progress(
-        self, current: int, total: int | None = None, **kwargs: object,
+        self,
+        current: int,
+        total: int | None = None,
+        **kwargs: object,
     ) -> None:
         """Log job progress."""
         progress_pct = round((current / total) * 100, 1) if total else None
@@ -189,23 +196,27 @@ class JobLogger:
     def info(self, message: str, **kwargs: object) -> None:
         """Log an info message with job context."""
         self.logger.info(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
+            message,
+            extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
     def error(self, message: str, **kwargs: object) -> None:
         """Log an error message with job context."""
         self.logger.error(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
+            message,
+            extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
     def warning(self, message: str, **kwargs: object) -> None:
         """Log a warning message with job context."""
         self.logger.warning(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
+            message,
+            extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
 
     def debug(self, message: str, **kwargs: object) -> None:
         """Log a debug message with job context."""
         self.logger.debug(
-            message, extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
+            message,
+            extra={"job_id": self.job_id, "job_name": self.job_name, **kwargs},
         )
