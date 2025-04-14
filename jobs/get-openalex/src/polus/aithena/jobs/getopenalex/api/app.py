@@ -62,7 +62,8 @@ class WorkSearchParams(BaseModel):
 
     query: str | None = Field(None, description="Search query")
     from_date: str | None = Field(
-        None, description="From publication date (YYYY-MM-DD)",
+        None,
+        description="From publication date (YYYY-MM-DD)",
     )
     to_date: str | None = Field(None, description="To publication date (YYYY-MM-DD)")
     limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
@@ -74,9 +75,13 @@ class WorkSearchParams(BaseModel):
     concept_id: str | None = Field(None, description="Filter by concept ID")
     doi: str | None = Field(None, description="Filter by DOI")
     pmcid: str | None = Field(
-        None, description="Filter by PubMed Central ID (pmcid)",
+        None,
+        description="Filter by PubMed Central ID (pmcid)",
     )
     pmid: str | None = Field(None, description="Filter by PubMed ID (pmid)")
+    raw: bool = Field(
+        False, description="Return raw PyalexWork data instead of Work model"
+    )
 
     def to_filters(self) -> dict[str, Any]:
         """Convert search parameters to OpenAlex API filters."""
@@ -157,11 +162,13 @@ class UpdateRequest(BaseModel):
 
     job_type: str = Field(..., description="Type of update job")
     from_date: str | None = Field(
-        None, description="Start date for updates (YYYY-MM-DD)",
+        None,
+        description="Start date for updates (YYYY-MM-DD)",
     )
     max_records: int | None = Field(None, description="Maximum records to process")
     use_postgres: bool | None = Field(
-        None, description="Whether to store data in PostgreSQL",
+        None,
+        description="Whether to store data in PostgreSQL",
     )
 
 
@@ -210,10 +217,12 @@ async def health() -> dict:
 async def get_works(
     query: str | None = Query(None, description="Search query"),
     from_date: str | None = Query(
-        None, description="From publication date (YYYY-MM-DD)",
+        None,
+        description="From publication date (YYYY-MM-DD)",
     ),
     to_date: str | None = Query(
-        None, description="To publication date (YYYY-MM-DD)",
+        None,
+        description="To publication date (YYYY-MM-DD)",
     ),
     author_id: str | None = Query(None, description="Filter by author ID"),
     institution_id: str | None = Query(None, description="Filter by institution ID"),
@@ -221,12 +230,16 @@ async def get_works(
     concept_id: str | None = Query(None, description="Filter by concept ID"),
     doi: str | None = Query(None, description="Filter by DOI"),
     pmcid: str | None = Query(
-        None, description="Filter by PubMed Central ID (pmcid)",
+        None,
+        description="Filter by PubMed Central ID (pmcid)",
     ),
     pmid: str | None = Query(None, description="Filter by PubMed ID (pmid)"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Results per page"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of results"),
+    raw: bool = Query(
+        False, description="Return raw PyalexWork data instead of Work model"
+    ),
 ) -> PaginatedResponse:
     """Get works from OpenAlex with various filters."""
     search_params = WorkSearchParams(
@@ -243,6 +256,7 @@ async def get_works(
         page=page,
         per_page=per_page,
         limit=limit,
+        raw=raw,
     )
 
     filters = search_params.to_filters()
@@ -254,10 +268,14 @@ async def get_works(
             filters=filters,
             per_page=per_page,
             initial_page=page,
+            raw=raw,
         )
 
         results_page = await paginator.get_page_async()
-        results = [work.model_dump() for work in results_page]
+        results = [
+            work.model_dump() if not raw and hasattr(work, "model_dump") else work
+            for work in results_page
+        ]
 
         return PaginatedResponse(
             count=paginator.count if paginator.count else len(results),
@@ -273,22 +291,26 @@ async def get_works(
     except RateLimitError as e:
         logger.error(f"Rate limit exceeded: {e!s}")
         raise HTTPException(
-            status_code=429, detail="OpenAlex rate limit exceeded",
+            status_code=429,
+            detail="OpenAlex rate limit exceeded",
         ) from e
     except APIError as e:
         logger.error(f"API error: {e!s}")
         raise HTTPException(
-            status_code=502, detail=f"OpenAlex API error: {e!s}",
+            status_code=502,
+            detail=f"OpenAlex API error: {e!s}",
         ) from e
     except OpenAlexError as e:
         logger.error(f"OpenAlex error: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"OpenAlex error: {e!s}",
+            status_code=500,
+            detail=f"OpenAlex error: {e!s}",
         ) from e
     except Exception as e:
         logger.exception(f"Unexpected error: {e!s}")
         raise HTTPException(
-            status_code=500, detail="Unexpected error occurred",
+            status_code=500,
+            detail="Unexpected error occurred",
         ) from e
 
 
@@ -306,10 +328,18 @@ async def search_works(search_params: WorkSearchParams) -> PaginatedResponse:
             filters=filters,
             per_page=search_params.per_page,
             initial_page=search_params.page,
+            raw=search_params.raw,
         )
 
         results_page = await paginator.get_page_async()
-        results = [work.model_dump() for work in results_page]
+        results = [
+            (
+                work.model_dump()
+                if not search_params.raw and hasattr(work, "model_dump")
+                else work
+            )
+            for work in results_page
+        ]
 
         return PaginatedResponse(
             count=paginator.count if paginator.count else len(results),
@@ -325,22 +355,26 @@ async def search_works(search_params: WorkSearchParams) -> PaginatedResponse:
     except RateLimitError as e:
         logger.error(f"Rate limit exceeded: {e!s}")
         raise HTTPException(
-            status_code=429, detail="OpenAlex rate limit exceeded",
+            status_code=429,
+            detail="OpenAlex rate limit exceeded",
         ) from e
     except APIError as e:
         logger.error(f"API error: {e!s}")
         raise HTTPException(
-            status_code=502, detail=f"OpenAlex API error: {e!s}",
+            status_code=502,
+            detail=f"OpenAlex API error: {e!s}",
         ) from e
     except OpenAlexError as e:
         logger.error(f"OpenAlex error: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"OpenAlex error: {e!s}",
+            status_code=500,
+            detail=f"OpenAlex error: {e!s}",
         ) from e
     except Exception as e:
         logger.exception(f"Unexpected error: {e!s}")
         raise HTTPException(
-            status_code=500, detail="Unexpected error occurred",
+            status_code=500,
+            detail="Unexpected error occurred",
         ) from e
 
 
@@ -355,12 +389,14 @@ async def get_work_by_id(work_id: str) -> dict:
             formatted_id = work_id
 
         works = await get_filtered_works_async(
-            filters={"id": formatted_id}, max_results=1,
+            filters={"id": formatted_id},
+            max_results=1,
         )
 
         if not works:
             raise HTTPException(
-                status_code=404, detail=f"Work with ID {work_id} not found",
+                status_code=404,
+                detail=f"Work with ID {work_id} not found",
             )
 
         return works[0].model_dump()
@@ -370,22 +406,26 @@ async def get_work_by_id(work_id: str) -> dict:
     except RateLimitError as e:
         logger.error(f"Rate limit exceeded: {e!s}")
         raise HTTPException(
-            status_code=429, detail="OpenAlex rate limit exceeded",
+            status_code=429,
+            detail="OpenAlex rate limit exceeded",
         ) from e
     except APIError as e:
         logger.error(f"API error: {e!s}")
         raise HTTPException(
-            status_code=502, detail=f"OpenAlex API error: {e!s}",
+            status_code=502,
+            detail=f"OpenAlex API error: {e!s}",
         ) from e
     except OpenAlexError as e:
         logger.error(f"OpenAlex error: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"OpenAlex error: {e!s}",
+            status_code=500,
+            detail=f"OpenAlex error: {e!s}",
         ) from e
     except Exception as e:
         logger.exception(f"Unexpected error: {e!s}")
         raise HTTPException(
-            status_code=500, detail="Unexpected error occurred",
+            status_code=500,
+            detail="Unexpected error occurred",
         ) from e
 
 
@@ -395,7 +435,10 @@ async def get_jobs(
     status: str | None = Query(None, description="Filter by job status"),
     job_type: str | None = Query(None, description="Filter by job type"),
     limit: int = Query(
-        10, ge=1, le=100, description="Maximum number of jobs to return",
+        10,
+        ge=1,
+        le=100,
+        description="Maximum number of jobs to return",
     ),
 ) -> list[Job]:
     """Get a list of jobs."""
@@ -428,7 +471,8 @@ async def get_jobs(
     except Exception as e:
         logger.exception(f"Error retrieving jobs: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"Error retrieving jobs: {e!s}",
+            status_code=500,
+            detail=f"Error retrieving jobs: {e!s}",
         ) from e
 
 
@@ -485,7 +529,8 @@ def run_update_job_background(
 
 @app.post("/update", response_model=Job)
 async def start_update_job(
-    update_request: UpdateRequest, background_tasks: BackgroundTasks,
+    update_request: UpdateRequest,
+    background_tasks: BackgroundTasks,
 ) -> Job:
     """Start a data update job."""
     try:
@@ -542,5 +587,6 @@ async def start_update_job(
     except Exception as e:
         logger.exception(f"Error starting update job: {e!s}")
         raise HTTPException(
-            status_code=500, detail=f"Error starting update job: {e!s}",
+            status_code=500,
+            detail=f"Error starting update job: {e!s}",
         ) from e
