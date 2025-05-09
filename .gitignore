@@ -5,6 +5,7 @@ values.yaml
 
 # secrets (may contain sensitive data)
 **/**-secret.yaml
+**/**secret.yaml
 !**/secret_sample.yaml
 
 # environment file (may contain sensitive data)
