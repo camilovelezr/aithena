@@ -1,31 +1,34 @@
+// Load environment variables from .env.local
+require('dotenv').config({ path: '.env.local' });
+
 const http = require('http');
 const { parse } = require('url');
 const next = require('next');
 const httpProxy = require('http-proxy');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = '0.0.0.0';
+const hostname = dev ? 'localhost' : '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
 // Initialize Next.js
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// Get environment variables
-const API_URL = process.env.API_URL;
-const RABBITMQ_WS_URL = process.env.RABBITMQ_WS_URL;
+// Use environment variables directly
+const API_URL = process.env.API_URL || 'http://ask-aithena-agent-service:8000';
+const RABBITMQ_WS_URL = process.env.RABBITMQ_WS_URL || 'ws://rabbitmq-service:15674/ws';
 
 // Log environment variables for debugging
-console.log('Environment variables:');
+console.log('Environment configuration:');
 console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('APP_ENV:', process.env.APP_ENV || 'production');
 console.log('API_URL:', API_URL);
 console.log('RABBITMQ_WS_URL:', RABBITMQ_WS_URL);
 
 if (!API_URL || !RABBITMQ_WS_URL) {
-    console.error('Required environment variables are missing:');
-    if (!API_URL) console.error('- API_URL is not set');
-    if (!RABBITMQ_WS_URL) console.error('- RABBITMQ_WS_URL is not set');
-    process.exit(1);
+    console.warn('Environment variables using defaults:');
+    console.warn('- API_URL:', API_URL);
+    console.warn('- RABBITMQ_WS_URL:', RABBITMQ_WS_URL);
 }
 
 // Create a proxy server for WebSocket connections with extended timeouts
@@ -131,8 +134,9 @@ app.prepare().then(() => {
     server.on('upgrade', function (req, socket, head) {
         const parsedUrl = parse(req.url);
         
-        if (parsedUrl.pathname === '/api/rabbitmq/ws') {
-            console.log('Upgrading WebSocket connection to:', RABBITMQ_WS_URL);
+        // Handle both WebSocket paths
+        if (parsedUrl.pathname === '/api/rabbitmq/ws' || parsedUrl.pathname === '/askaithena/rabbitmq/ws') {
+            console.log(`Upgrading WebSocket connection on path ${parsedUrl.pathname} to:`, RABBITMQ_WS_URL);
             console.log('Request headers:', req.headers);
             
             // Ensure WebSocket upgrade headers
@@ -156,7 +160,9 @@ app.prepare().then(() => {
     server.listen(port, hostname, (err) => {
         if (err) throw err;
         console.log(`> Ready on http://${hostname}:${port}`);
-        console.log('> WebSocket proxy configured for /rabbitmq/ws');
+        console.log('> WebSocket proxy configured for:');
+        console.log('  - /api/rabbitmq/ws');
+        console.log('  - /askaithena/rabbitmq/ws');
         console.log(`> Using RabbitMQ WebSocket URL: ${RABBITMQ_WS_URL}`);
         console.log('> Proxy timeouts set to 1 hour');
     });

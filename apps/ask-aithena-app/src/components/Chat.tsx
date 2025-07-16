@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MessageItem from './MessageItem';
 import ProcessingStatusCard from './ProcessingStatusCard';
 import { useChatStore } from '@/store/chatStore';
-import { askQuestion, parseStreamingResponse } from '@/services/api';
+import { askQuestion, continueConversation, parseStreamingResponse } from '@/services/api';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
@@ -161,8 +161,29 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             // Initial scroll to bottom for new query
             scrollToBottom();
 
-            // Make API request with session ID
-            const response = await askQuestion(currentQuery, mode, sessionIdRef.current);
+            // Check if this is a follow-up conversation (has existing assistant messages)
+            const hasConversationStarted = messages.some(msg => msg.role === 'assistant' && msg.content.trim() !== '');
+            
+            let response: Response;
+            
+            if (hasConversationStarted) {
+                // Build conversation history for talker agent
+                const history = messages
+                    .filter(msg => msg.content.trim() !== '') // Filter out empty messages
+                    .map(msg => ({
+                        role: msg.role,
+                        content: msg.content
+                    }));
+                
+                // Add the current query to history
+                history.push({ role: 'user', content: currentQuery });
+                
+                // Use talker endpoint for follow-up conversations
+                response = await continueConversation(history, sessionIdRef.current);
+            } else {
+                // First question - use the original endpoint with selected mode
+                response = await askQuestion(currentQuery, mode, sessionIdRef.current, settings.similarity_n);
+            }
 
             // Use parseStreamingResponse to handle the stream
             const streamParser = parseStreamingResponse(response);
@@ -175,7 +196,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     // If user has scrolled up, just update content without scrolling
                     if (captureReferences) {
                         referencesPart += chunk;
-                    } else if (chunk.includes('\n\n\n')) {
+                    } else if (chunk.includes('\n\n\n') && !hasConversationStarted) {
+                        // Only capture references for initial responses, not talker responses
                         captureReferences = true;
                         const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
                         assistantMessage += beforeSeparator;
@@ -191,7 +213,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     // Normal flow with scrolling
                     if (captureReferences) {
                         referencesPart += chunk;
-                    } else if (chunk.includes('\n\n\n')) {
+                    } else if (chunk.includes('\n\n\n') && !hasConversationStarted) {
+                        // Only capture references for initial responses, not talker responses
                         captureReferences = true;
                         const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
                         assistantMessage += beforeSeparator;
@@ -206,8 +229,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                 }
             }
 
-            // Apply references if found
-            if (referencesPart.trim()) {
+            // Apply references if found (only for initial responses)
+            if (referencesPart.trim() && !hasConversationStarted) {
                 addReferencesToLastAssistantMessage(referencesPart.trim());
                 if (!hasUserScrolled.current) {
                     updateMessageAndScroll(assistantMessage);
@@ -426,4 +449,4 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
 //     </button>
 // );
 
-export default Chat; 
+export default Chat;

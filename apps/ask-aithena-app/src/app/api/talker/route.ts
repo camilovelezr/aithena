@@ -3,16 +3,16 @@ import { API_URL } from '@/lib/server/config';
 
 export async function POST(request: NextRequest) {
     try {
-        const { query, mode, sessionId, similarity_n } = await request.json();
+        const { history, sessionId } = await request.json();
         
-        // Make the request server-side
-        const response = await fetch(`${API_URL}/${mode}/ask`, {
+        // Make the request to the talker endpoint
+        const response = await fetch(`${API_URL}/talker/talk`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Session-ID': sessionId
             },
-            body: JSON.stringify({ query, similarity_n })
+            body: JSON.stringify({ history })
         });
 
         if (!response.ok) {
@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
             }
         });
     } catch (error) {
-        console.error('Error in ask route:', error);
+        console.error('Error in talker route:', error);
         return NextResponse.json(
             { error: 'Failed to process request' },
             { status: 500 }
         );
     }
-} 
+}

@@ -15,14 +15,14 @@ export interface ApiHealthStatus {
 }
 
 // Function to ask the AI based on the selected mode
-export async function askQuestion(query: string, mode: AIMode, sessionId: string): Promise<Response> {
+export async function askQuestion(query: string, mode: AIMode, sessionId: string, similarity_n: number): Promise<Response> {
     try {
         const response = await fetch('/api/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ query, mode, sessionId }),
+            body: JSON.stringify({ query, mode, sessionId, similarity_n }),
         });
 
         if (!response.ok) {
@@ -32,6 +32,28 @@ export async function askQuestion(query: string, mode: AIMode, sessionId: string
         return response;
     } catch (error) {
         console.error('Error asking question:', error);
+        throw error;
+    }
+}
+
+// Function to continue conversation using the talker agent
+export async function continueConversation(history: Array<{role: string, content: string}>, sessionId: string): Promise<Response> {
+    try {
+        const response = await fetch('/api/talker', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ history, sessionId }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`API request failed: ${response.statusText}`);
+        }
+
+        return response;
+    } catch (error) {
+        console.error('Error continuing conversation:', error);
         throw error;
     }
 }
@@ -112,4 +134,4 @@ export function useApiHealth(pollingInterval = 30000) {
         loading,
         refreshStatus
     };
-} 
+}
