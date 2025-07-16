@@ -1,25 +1,111 @@
 # mypy: disable-error-code="import-untyped"
 # pylint: disable=E1129, W1203
 """pgvector database utilities for aithena-services."""
-import re
+from typing import Optional
 
-import psycopg
+import asyncpg
+import orjson
 from aithena_services.config import (
+    IVFFLAT_PROBES,
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from openalex_types import Work
 from polus.aithena.common.logger import get_logger
 
 logger = get_logger("aithena_services.memory.pgvector")
 
-DB_CONFIG_STRING = f"dbname={POSTGRES_DB} user={POSTGRES_USER} "
-DB_CONFIG_STRING += (
-    f"port={POSTGRES_PORT} host={POSTGRES_HOST} password={POSTGRES_PASSWORD}"
-)
+# Connection pool - will be initialized at startup
+_pool: Optional[asyncpg.Pool] = None
+
+
+async def init_pool(
+    min_size: int = 10,
+    max_size: int = 20,
+    max_queries: int = 50000,
+    max_inactive_connection_lifetime: float = 300.0,
+) -> asyncpg.Pool:
+    """Initialize the connection pool."""
+    global _pool
+    
+    if _pool is not None:
+        logger.warning("Pool already initialized, closing existing pool")
+        await close_pool()
+    
+    # Define connection setup function
+    async def setup_connection(conn):
+        # Set ivfflat probes if configured
+        if IVFFLAT_PROBES:
+            await conn.execute(f'SET ivfflat.probes = {IVFFLAT_PROBES}')
+            logger.debug(f"Set ivfflat.probes = {IVFFLAT_PROBES}")
+    
+    logger.info(f"Initializing asyncpg connection pool to {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}")
+    
+    _pool = await asyncpg.create_pool(
+        host=POSTGRES_HOST,
+        port=int(POSTGRES_PORT),
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        database=POSTGRES_DB,
+        min_size=min_size,
+        max_size=max_size,
+        max_queries=max_queries,
+        max_inactive_connection_lifetime=max_inactive_connection_lifetime,
+        command_timeout=60,
+        statement_cache_size=100,  # Cache prepared statements
+        setup=setup_connection,  # Set up each connection with ivfflat.probes
+        server_settings={
+            'jit': 'off',  # Disable JIT for short queries
+            'random_page_cost': '1.1',  # Optimized for SSD
+        }
+    )
+    
+    
+    # Test the connection and log database info
+    async with _pool.acquire() as conn:
+        current_db = await conn.fetchval("SELECT current_database()")
+        schemas = await conn.fetch("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema') ORDER BY schema_name")
+        schema_list = [r['schema_name'] for r in schemas]
+        
+        logger.info(f"Connection pool initialized successfully")
+        logger.info(f"Connected to database: {current_db}")
+        logger.info(f"Available schemas: {schema_list}")
+        if IVFFLAT_PROBES:
+            logger.info(f"IVFFlat probes set to: {IVFFLAT_PROBES}")
+        
+        # Check if openalex schema exists and has the expected table
+        if 'openalex' in schema_list:
+            tables = await conn.fetch("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'openalex' 
+                AND table_name LIKE '%embedding%'
+                ORDER BY table_name
+            """)
+            table_list = [r['table_name'] for r in tables]
+            logger.info(f"Embedding tables in openalex schema: {table_list}")
+    
+    return _pool
+
+
+async def close_pool() -> None:
+    """Close the connection pool."""
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None
+        logger.info("Connection pool closed")
+
+
+def get_pool() -> asyncpg.Pool:
+    """Get the connection pool. Raises RuntimeError if pool not initialized."""
+    if _pool is None:
+        raise RuntimeError(
+            "Connection pool not initialized. Call init_pool() first."
+        )
+    return _pool
 
 
 def return_query_full_work(table_name: str, vector: list[float], limit: int) -> str:
@@ -107,12 +193,12 @@ def return_query_full_work(table_name: str, vector: list[float], limit: int) -> 
     return query
 
 
-def similarity_search(
+async def similarity_search(
     table_name: str,
     vector: list[float],
     limit: int,
     full: bool = False,
-) -> list[Work]:
+) -> list[dict]:
     """
     Search for similar works.
 
@@ -127,72 +213,53 @@ def similarity_search(
         full (bool, optional): Whether to query and return the full Work object.
 
     Returns:
-        list[Work]: A list of Work objects as dict.
+        list[dict]: A list of Work objects as dict.
     """
-    if not full:
-        query = f"""
-        WITH limited_works AS (
-        SELECT works.id
-        FROM {table_name} AS emb
-        JOIN openalex.works AS works
-            ON emb.work_id = works.id
-        ORDER BY emb.embedding <=> '{vector}'
-        LIMIT {limit}
-        )
-        SELECT
-            row_to_json(works)::jsonb || jsonb_build_object(
-                'authorships',
-                CASE
-                    WHEN COUNT(works_authorships.work_id) = 0 THEN NULL
-                    ELSE json_agg(
-                        DISTINCT json_build_object(
-                            'author', json_build_object(
-                                'display_name', authors.display_name,
-                                'id', works_authorships.author_id
-                            )::jsonb
-                        )::jsonb
-                    )
-                END
-            ) AS work_with_authorships
-        FROM limited_works
-        JOIN openalex.works AS works
-            ON limited_works.id = works.id
-        LEFT JOIN openalex.works_authorships AS works_authorships
-            ON works.id = works_authorships.work_id
-        LEFT JOIN openalex.authors AS authors
-            ON works_authorships.author_id = authors.id
-        GROUP BY works.id;  
-        """
-    else:
-        query = return_query_full_work(table_name, vector, limit)
-
-    with psycopg.connect(DB_CONFIG_STRING) as conn:
-        with conn.cursor() as cur:
-            try:
-                query_to_log = re.sub(r"\[.*?\]", "[...]", query)
-                logger.debug(
-                    f"Performing similarity search with query: {query_to_log}")
-                cur.execute(query)
-                res = cur.fetchall()
-
-                if full:
-                    works = [Work(**w) for w in res[0][0]]
-                else:
-                    works = [Work(**w[0]) for w in res]
-            except Exception as e:
-                logger.error(f"Error when performing similarity search: {e}")
-                raise e
-
-    return works
+    # if not full:
+    #     query = f"""
+    #     WITH limited_works AS (
+    #     SELECT works.id
+    #     FROM {table_name} AS emb
+    #     JOIN openalex.works AS works
+    #         ON emb.work_id = works.id
+    #     ORDER BY emb.embedding <=> '{vector}'
+    #     LIMIT {limit}
+    #     )
+    #     SELECT
+    #         row_to_json(works)::jsonb || jsonb_build_object(
+    #             'authorships',
+    #             CASE
+    #                 WHEN COUNT(works_authorships.work_id) = 0 THEN NULL
+    #                 ELSE json_agg(
+    #                     DISTINCT json_build_object(
+    #                         'author', json_build_object(
+    #                             'display_name', authors.display_name,
+    #                             'id', works_authorships.author_id
+    #                         )::jsonb
+    #                     )::jsonb
+    #                 )
+    #             END
+    #         ) AS work_with_authorships
+    #     FROM limited_works
+    #     JOIN openalex.works AS works
+    #         ON limited_works.id = works.id
+    #     LEFT JOIN openalex.works_authorships AS works_authorships
+    #         ON works.id = works_authorships.work_id
+    #     LEFT JOIN openalex.authors AS authors
+    #         ON works_authorships.author_id = authors.id
+    #     GROUP BY works.id;  
+    #     """
+    raise NotImplementedError("Not implemented")
 
 
-def work_ids_by_similarity_search(
+async def works_by_similarity_search(
     table_name: str,
     vector: list[float],
     limit: int,
-) -> list[str]:
+) -> list[dict]:
     """
-    Search for similar works and return only id.
+    Search for similar works and return just basic work metadata with authorships.
+    Uses prepared statements and optimized query structure for better performance.
 
     Args:
         table_name (str): The name of the table to search in.
@@ -200,69 +267,66 @@ def work_ids_by_similarity_search(
         limit (int, optional): The maximum number of similar vectors to return.
 
     Returns:
-        list[str]: A list of IDs of the similar vectors found.
+        list[dict]: A list of dicts containing the works data with authorships.
     """
-    query = f"""
-    SELECT work_id
-    FROM {table_name}
-    ORDER BY embedding <=> '{vector}' LIMIT {limit};
-    """
-
-    with psycopg.connect(DB_CONFIG_STRING) as conn:
-        with conn.cursor() as cur:
-            try:
-                query_to_log = re.sub(r"\[.*?\]", "[...]", query)
-                logger.debug(
-                    f"Performing similarity search with query: {query_to_log}")
-                cur.execute(query)
-                res = cur.fetchall()
-                res_to_return = [r[0] for r in res]
-            except Exception as e:
-                logger.error(f"Error when performing similarity search: {e}")
-                raise e
-
-    return res_to_return
-
-
-def works_by_similarity_search(
-    table_name: str,
-    vector: list[float],
-    limit: int,
-) -> list[Work]:
-    """
-    Search for similar works and return just basic work metadata.
-
-    Args:
-        table_name (str): The name of the table to search in.
-        vector (list[float]): The vector to search for similarities.
-        limit (int, optional): The maximum number of similar vectors to return.
-
-    Returns:
-        list[str]: A list of IDs of the similar vectors found.
-    """
-    query = f"""
+    # Optimized query using LATERAL join
+    query_template = f"""
     WITH selected_work_ids AS (
-    SELECT work_id
-    FROM {table_name}
-    ORDER BY embedding <=> '{vector}' LIMIT {limit}
+        SELECT work_id
+        FROM {table_name}
+        ORDER BY embedding <=> $1::vector LIMIT $2
     )
-    SELECT w.*
-    FROM openalex.works w
-    JOIN selected_work_ids s ON w.id = s.work_id;
-    ;
+    SELECT 
+        w.id,
+        w.title,
+        w.abstract,
+        w.publication_year,
+        w.doi,
+        COALESCE(auth.authorships, '[]'::json) as authorships
+    FROM selected_work_ids s
+    JOIN openalex.works w ON w.id = s.work_id
+    LEFT JOIN LATERAL (
+        SELECT json_agg(
+            json_build_object(
+                'author_position', wa.author_position,
+                'author_id', wa.author_id,
+                'display_name', a.display_name
+            ) ORDER BY wa.author_position
+        ) as authorships
+        FROM openalex.works_authorships wa
+        JOIN openalex.authors a ON wa.author_id = a.id
+        WHERE wa.work_id = w.id
+    ) auth ON true;
     """
 
-    with psycopg.connect(DB_CONFIG_STRING) as conn:
-        with conn.cursor() as cur:
-            try:
-                query_to_log = re.sub(r"\[.*?\]", "[...]", query)
-                logger.debug(
-                    f"Performing similarity search with query: {query_to_log}")
-                cur.execute(query)
-                res = cur.fetchall()
-                works = [Work.from_sql(work) for work in res]
-            except Exception as e:
-                logger.error(f"Error when performing similarity search: {e}")
-                raise e
-
-    return works
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        try:
+            # Prepare statement for this connection
+            logger.debug(f"Preparing statement for table: {table_name}")
+            prepared_stmt = await conn.prepare(query_template)
+            
+            # Convert vector to string format for PostgreSQL
+            vector_str = f"[{','.join(map(str, vector))}]"
+            
+            # Execute prepared statement
+            rows = await prepared_stmt.fetch(vector_str, limit)
+            
+            # Convert asyncpg Records to dicts with proper handling of None values
+            results = []
+            for row in rows:
+                result = {
+                    'id': row['id'],
+                    'title': row['title'],
+                    'abstract': row['abstract'],
+                    'publication_year': row['publication_year'],
+                    'doi': row['doi'],
+                    'authorships': orjson.loads(row['authorships']) if row['authorships'] else []
+                }
+                results.append(result)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error when performing similarity search: {e}")
+            raise e
