@@ -6,10 +6,7 @@ It is a self-supervised agent that will extract a sentence from a user query.
 from pathlib import Path
 from typing import Optional
 
-import orjson
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema, BaseAgentConfig
 from pydantic import Field, BaseModel
-import instructor
 from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
     LITELLM_API_KEY,
@@ -19,10 +16,8 @@ from polus.aithena.ask_aithena.config import (
 )
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.settings import ModelSettings
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-import openai
 from polus.aithena.common.logger import get_logger
 from faststream.rabbit import RabbitBroker
 from polus.aithena.ask_aithena.rabbit import (
@@ -39,13 +34,11 @@ if USE_LOGFIRE:
 logger = get_logger(__name__)
 
 PROMPTS_DIR = PROMPTS_DIR.joinpath("semantics")
-EXTRACT_SEMANTICS_AGENT_PROMPT = orjson.loads(
-    Path(PROMPTS_DIR, "extract_agent.json").read_text()
-)
+EXTRACT_SEMANTICS_AGENT_PROMPT = Path(PROMPTS_DIR, "extract_agent.txt").read_text()
 MAIN_AGENT_PROMPT = Path(PROMPTS_DIR, "main_agent.txt").read_text()
 
 
-class ExtractSemanticAgentInput(BaseIOSchema):
+class ExtractSemanticAgentDeps(BaseModel):
     """User's original query, we want to extract the main topic from this query."""
 
     query: str = Field(..., description="The original user query")
@@ -55,7 +48,7 @@ class ExtractSemanticAgentInput(BaseIOSchema):
     )
 
 
-class ExtractSemanticAgentOutput(BaseIOSchema):
+class ExtractSemanticAgentOutput(BaseModel):
     """Sentence that captures the main idea of the question in an appropriate syntax for vector embedding."""
 
     sentence: str = Field(
@@ -72,26 +65,31 @@ class SemanticAgentOutput(BaseModel):
         description="The sentence that captures the main idea of the question in an appropriate syntax for vector embedding.",
     )
 
-
-extract_semantic_agent = BaseAgent(
-    BaseAgentConfig(
-        client=instructor.from_openai(
-            openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
-        ),
-        model=SEMANTICS_MODEL,
-        system_prompt_generator=SystemPromptGenerator(
-            background=EXTRACT_SEMANTICS_AGENT_PROMPT["background"],
-            steps=EXTRACT_SEMANTICS_AGENT_PROMPT["steps"],
-            output_instructions=EXTRACT_SEMANTICS_AGENT_PROMPT["output_instructions"],
-        ),
-        input_schema=ExtractSemanticAgentInput,
-        output_schema=ExtractSemanticAgentOutput,
-        model_api_parameters={"temperature": SEMANTICS_TEMPERATURE},
-    )
+semantic_extractor_model = OpenAIModel(
+    model_name=SEMANTICS_MODEL,
+    provider=OpenAIProvider(
+        base_url=LITELLM_URL,
+        api_key=LITELLM_API_KEY,
+    ),
 )
 
-model = OpenAIModel(
-    model_name="azure-gpt-4o",
+semantic_extractor_agent = Agent(
+    model=semantic_extractor_model,
+    system_prompt=EXTRACT_SEMANTICS_AGENT_PROMPT,
+    output_type=ExtractSemanticAgentOutput,
+    deps_type=ExtractSemanticAgentDeps,
+    instrument=USE_LOGFIRE,
+    model_settings=ModelSettings(
+        temperature=SEMANTICS_TEMPERATURE,
+    ),
+)
+
+@semantic_extractor_agent.system_prompt
+async def semantic_extractor_system_prompt(ctx: RunContext[ExtractSemanticAgentDeps]) -> str:
+    return f"User query: {ctx.deps.query}\nExtra instructions: {ctx.deps.extra_instructions}"
+
+semantic_judge_model = OpenAIModel(
+    model_name="gpt-4.1",
     provider=OpenAIProvider(
         base_url=LITELLM_URL,
         api_key=LITELLM_API_KEY,
@@ -99,9 +97,9 @@ model = OpenAIModel(
 )
 
 semantic_agent = Agent(
-    model=model,
+    model=semantic_judge_model,
     system_prompt=MAIN_AGENT_PROMPT,
-    result_type=SemanticAgentOutput,
+    output_type=SemanticAgentOutput,
     instrument=USE_LOGFIRE,
     model_settings=ModelSettings(
         temperature=SEMANTICS_TEMPERATURE,
@@ -121,9 +119,9 @@ async def extract_semantics(
         extra_instructions: optional important considerations passed to the expert LLM.
     """
 
-    inp = ExtractSemanticAgentInput(query=query, extra_instructions=extra_instructions)
-    res = extract_semantic_agent.run(inp)
-    return res.sentence
+    deps = ExtractSemanticAgentDeps(query=query, extra_instructions=extra_instructions)
+    res = await semantic_extractor_agent.run(deps=deps)
+    return res.output.sentence
 
 
 async def run_semantic_agent(

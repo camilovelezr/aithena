@@ -1,25 +1,21 @@
 from pathlib import Path
 import orjson
 
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema, BaseAgentConfig
-
-import instructor
 from polus.aithena.ask_aithena.config import (
     PROMPTS_DIR,
     LITELLM_URL,
     LITELLM_API_KEY,
 )
 
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-import openai
 from polus.aithena.common.logger import get_logger
-from pydantic_ai import Agent, RunContext
 from pydantic import Field, BaseModel
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import ModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
-from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.config import USE_LOGFIRE, SHIELD_MODEL, SHIELD_TEMPERATURE
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
@@ -64,7 +60,7 @@ class RerankedWork(BaseModel):
 
 
 model = OpenAIModel(
-    "azure-gpt-4o",
+    SHIELD_MODEL,
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
 )
 reranker_agent = Agent(
@@ -72,7 +68,8 @@ reranker_agent = Agent(
     system_prompt=RERANKER_AGENT_PROMPT,
     deps_type=RerankerDeps,
     instrument=USE_LOGFIRE,
-    result_type=list[RerankedWork],
+    output_type=list[RerankedWork],
+    model_settings=ModelSettings(temperature=SHIELD_TEMPERATURE),
 )
 
 
@@ -127,7 +124,7 @@ define_topic_agent = BaseAgent(
             openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
         ),
         model="llama3.2",
-        temperature=0.3,
+        temperature=SHIELD_TEMPERATURE,
         system_prompt_generator=SystemPromptGenerator(
             background=RERANKER_DEFINE_TOPIC_PROMPT["background"],
             steps=RERANKER_DEFINE_TOPIC_PROMPT["steps"],
@@ -171,7 +168,7 @@ describe_works_agent = BaseAgent(
         client=instructor.from_openai(
             openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
         ),
-        model="azure-gpt-4o-mini",
+        model=SHIELD_MODEL,
         system_prompt_generator=SystemPromptGenerator(
             background=RERANKER_DESCRIBE_WORKS_PROMPT["background"],
             steps=RERANKER_DESCRIBE_WORKS_PROMPT["steps"],
@@ -179,7 +176,7 @@ describe_works_agent = BaseAgent(
         ),
         input_schema=DescribeWorksInput,
         output_schema=DescribeWorksOutput,
-        model_api_parameters={"temperature": 0.3},
+        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
     )
 )
 
@@ -221,7 +218,7 @@ create_reranker_prompt_agent = BaseAgent(
         client=instructor.from_openai(
             openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
         ),
-        model="azure-gpt-4o",
+        model=SHIELD_MODEL,
         system_prompt_generator=SystemPromptGenerator(
             background=RERANKER_CREATE_PROMPT["background"],
             steps=RERANKER_CREATE_PROMPT["steps"],
@@ -229,6 +226,7 @@ create_reranker_prompt_agent = BaseAgent(
         ),
         input_schema=CreateRerankerPromptInput,
         output_schema=CreateRerankerPromptOutput,
+        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
     )
 )
 
@@ -281,7 +279,7 @@ call_reranker_agent = BaseAgent(
         client=instructor.from_openai(
             openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
         ),
-        model="azure-gpt-4o",
+        model=SHIELD_MODEL,
         system_prompt_generator=SystemPromptGenerator(
             background=[
                 "You are an expert in reranking works based on a user's query."
@@ -295,6 +293,7 @@ call_reranker_agent = BaseAgent(
         ),
         input_schema=CallRerankerInput,
         output_schema=CallRerankerOutput,
+        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
     )
 )
 

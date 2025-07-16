@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # environment variables
 ENV AITHENA_LOG_LEVEL="DEBUG"
@@ -9,9 +9,12 @@ WORKDIR ${EXEC_DIR}
 # Set environment variables to avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update && apt-get install -y git
+
 # Copy the repository into the container
 COPY agents/ask-aithena-agent ${EXEC_DIR}/aithena/agents/ask-aithena-agent/
 COPY common ${EXEC_DIR}/aithena/common
+COPY embeddings ${EXEC_DIR}/aithena/embeddings
 
 # Install the tool
 # RUN pip3 install "${EXEC_DIR}/aithena/agents/ask-aithena-agent"

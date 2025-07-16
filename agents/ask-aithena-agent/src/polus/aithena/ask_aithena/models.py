@@ -1,7 +1,8 @@
 from functools import cached_property
 from typing import Optional, Dict, Any, List
-from pydantic import Field
 from pydantic import BaseModel
+from pydantic import Field
+from pydantic import field_validator
 import json
 
 
@@ -47,9 +48,9 @@ class Document(BaseModel):
             authors_ = []
         else:
             authors_ = [
-                author["author"]["display_name"]
+                author["display_name"]
                 for author in work["authorships"]
-                if author["author"]["display_name"] is not None
+                if author["display_name"] is not None
             ]
 
         return cls(
@@ -60,6 +61,13 @@ class Document(BaseModel):
             authors=authors_,
             title=work["title"],
         )
+
+    # sometimes, the title is None, so we need to validate it
+    @field_validator("title", mode="before")
+    def validate_title(cls, v):
+        if v is None:
+            return "No title provided"
+        return v
 
 
 class Context(BaseModel):

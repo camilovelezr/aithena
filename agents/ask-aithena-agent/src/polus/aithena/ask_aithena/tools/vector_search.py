@@ -1,12 +1,10 @@
 import httpx
-from openai import OpenAI
 
 from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
-    LITELLM_API_KEY,
-    EMBEDDING_MODEL,
-    SIMILARITY_N,
     EMBEDDING_TABLE,
+    ARCTIC_HOST,
+    ARCTIC_PORT,
 )
 from polus.aithena.ask_aithena.logfire_logger import logfire
 from polus.aithena.common.logger import get_logger
@@ -16,50 +14,28 @@ from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_queue,
     ProcessingStatus,
 )
+from polus.aithena.embeddings import ArcticClient, SNOWFLAKE_L_V2
 
 from typing import Optional
 
 
 logger = get_logger(__name__)
 
-client = OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
+ARCTIC_CLIENT = ArcticClient(host=ARCTIC_HOST, port=ARCTIC_PORT)
 
-
-def _embed_text(text: str) -> list[float]:
+async def _embed_text(text: str) -> list[float]:
     """Embed text using OpenAI's embedding API.
     Not meant to be used directly. Use get_similar_works or get_similar_works_async instead.
     """
     logger.info(f"Embedding text: {text}")
     logfire.info(f"Embedding text: {text}")
     try:
-        return (
-            client.embeddings.create(input=text, model=EMBEDDING_MODEL)
-            .data[0]
-            .embedding
-        )
+        embedding = await ARCTIC_CLIENT.embed_query(text, model_name=SNOWFLAKE_L_V2)
+        return embedding[0].tolist()
     except Exception as e:
         logger.error(f"Error embedding text: {e}")
         logfire.error(f"Error embedding text: {e}")
         raise e
-
-
-def get_similar_works(text: str) -> list[dict]:
-    """Get similar works from the database."""
-    emb = _embed_text(text)
-    try:
-        with httpx.Client() as client:
-            logfire.instrument_httpx(client)
-            response = client.post(
-                f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
-                json={"vector": emb, "n": SIMILARITY_N, "table_name": EMBEDDING_TABLE},
-            )
-            response.raise_for_status()
-            return response.json()
-    except Exception as e:
-        logger.error(f"Error getting similar works synchronously: {e}")
-        logfire.error(f"Error getting similar works synchronously: {e}")
-        raise e
-
 
 async def get_similar_works_async(
     text: str,
@@ -68,7 +44,7 @@ async def get_similar_works_async(
     session_id: Optional[str] = None,
 ) -> list[dict]:
     """Asynchronously get similar works from the database."""
-    emb = _embed_text(text)
+    emb = await _embed_text(text)
     if broker is not None:
         await broker.publish(
             ProcessingStatus(

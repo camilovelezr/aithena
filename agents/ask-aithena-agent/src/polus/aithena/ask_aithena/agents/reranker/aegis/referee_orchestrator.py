@@ -10,8 +10,9 @@ from polus.aithena.ask_aithena.config import (
 )
 
 from polus.aithena.common.logger import get_logger
-from pydantic_ai import Agent, RunContext
 from pydantic import Field, BaseModel, ConfigDict
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import ModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
@@ -27,7 +28,7 @@ from polus.aithena.ask_aithena.rabbit import (
     ProcessingStatus,
 )
 from typing import Optional
-from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.config import USE_LOGFIRE, AEGIS_ORCHESTRATOR_MODEL, AEGIS_ORCHESTRATOR_TEMPERATURE
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
@@ -62,7 +63,7 @@ class AegisRerankerDeps(BaseModel):
 
 
 model = OpenAIModel(
-    "azure-gpt-4.5",
+    AEGIS_ORCHESTRATOR_MODEL,
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
 )
 
@@ -70,7 +71,8 @@ aegis_reranker_agent = Agent(
     model=model,
     system_prompt=PROMPT,
     deps_type=AegisRerankerDeps,
-    result_type=list[AegisRerankedWork],
+    output_type=list[AegisRerankedWork],
+    model_settings=ModelSettings(temperature=AEGIS_ORCHESTRATOR_TEMPERATURE),
 )
 
 

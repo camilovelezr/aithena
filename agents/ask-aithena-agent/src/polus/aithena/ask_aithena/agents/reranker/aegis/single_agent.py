@@ -7,8 +7,9 @@ from polus.aithena.ask_aithena.config import (
 )
 
 from polus.aithena.common.logger import get_logger
-from pydantic_ai import Agent, RunContext
 from pydantic import Field, BaseModel
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import ModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from polus.aithena.common.logger import get_logger
@@ -16,7 +17,7 @@ from polus.aithena.ask_aithena.agents.reranker.aegis.tools import (
     robust_noun_phrase_overlap as robust_tool,
     simplified_ngram_overlap as simplified_tool,
 )
-from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.config import USE_LOGFIRE, AEGIS_REFEREE_MODEL, AEGIS_REFEREE_TEMPERATURE
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
@@ -48,7 +49,7 @@ class Score(BaseModel):
 
 
 model = OpenAIModel(
-    "azure-gpt-4.5",
+    AEGIS_REFEREE_MODEL,
     provider=OpenAIProvider(base_url=LITELLM_URL, api_key=LITELLM_API_KEY),
 )
 referee_agent = Agent(
@@ -56,7 +57,8 @@ referee_agent = Agent(
     system_prompt=REFREEE_AGENT_PROMPT,
     deps_type=RefereeDeps,
     instrument=USE_LOGFIRE,
-    result_type=Score,
+    output_type=Score,
+    model_settings=ModelSettings(temperature=AEGIS_REFEREE_TEMPERATURE),
 )
 topic_agent = Agent(
     model=model,
@@ -76,7 +78,8 @@ topic_agent = Agent(
         "Do not return intermediate values - this is a binary assessment of topical relevance."
     ),
     instrument=USE_LOGFIRE,
-    result_type=int,
+    output_type=int,
+    model_settings=ModelSettings(temperature=AEGIS_REFEREE_TEMPERATURE),
 )
 intent_matching_agent = Agent(
     model=model,
@@ -98,7 +101,8 @@ intent_matching_agent = Agent(
         "- 0.0: The work's intent is completely unrelated to the query's intent"
     ),
     instrument=USE_LOGFIRE,
-    result_type=float,
+    output_type=float,
+    model_settings=ModelSettings(temperature=AEGIS_REFEREE_TEMPERATURE),
 )
 
 
