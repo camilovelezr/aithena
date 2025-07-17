@@ -115,20 +115,20 @@ def system_prompt(ctx: RunContext[RefereeDeps]) -> str:
 
 
 @referee_agent.tool_plain
-async def topical_intersection(query: str, work: str) -> float:
+async def topical_intersection(query: str, work: str) -> int:
     """
     Check if the work is on topic compared to the user's query.
     This is a measure of the meaningful topical intersection between the query and the work.
 
     Returns:
-        float: 1 if on-topic, 0 if completely unrelated
+        int: 1 if on-topic, 0 if completely unrelated
     """
     prompt = f"""
     <query>{query}</query>
     <work>{work}</work>
     """
     res = await topic_agent.run(prompt)
-    return res.data
+    return res.output
 
 
 @referee_agent.tool_plain
@@ -145,7 +145,7 @@ async def intent_matching(query: str, work: str) -> float:
     <work>{work}</work>
     """
     res = await intent_matching_agent.run(prompt)
-    return res.data
+    return res.output
 
 
 @referee_agent.tool_plain

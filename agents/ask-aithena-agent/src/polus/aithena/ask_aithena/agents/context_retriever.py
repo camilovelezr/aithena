@@ -39,7 +39,7 @@ async def retrieve_context(
             await broker.publish(
                 ProcessingStatus(
                     status="searching_for_works",
-                    message=f"Now I will search for works related to {semantics.data.sentence.lower()}...",
+                    message=f"Now I will search for works related to {semantics.output.sentence.lower()}...",
                 ).model_dump_json(),
                 exchange=ask_aithena_exchange,
                 queue=ask_aithena_queue,
@@ -47,7 +47,7 @@ async def retrieve_context(
             )
             logger.info("Running vector search")
             works = await get_similar_works_async(
-                semantics.data.sentence, similarity_n, broker, session_id
+                semantics.output.sentence, similarity_n, broker, session_id
             )
             logger.info("Creating context")
             context = Context.from_works(works)
@@ -59,7 +59,7 @@ async def retrieve_context(
         await broker.publish(
             ProcessingStatus(
                 status="searching_for_works",
-                message=f"Now I will search for works related to {semantics.data.sentence.lower()}...",
+                message=f"Now I will search for works related to {semantics.output.sentence.lower()}...",
             ).model_dump_json(),
             exchange=ask_aithena_exchange,
             queue=ask_aithena_queue,
@@ -67,7 +67,7 @@ async def retrieve_context(
         )
         logger.info("Running vector search")
         works = await get_similar_works_async(
-            semantics.data.sentence, similarity_n, broker, session_id
+            semantics.output.sentence, similarity_n, broker, session_id
         )
         logger.info("Creating context")
         context = Context.from_works(works)

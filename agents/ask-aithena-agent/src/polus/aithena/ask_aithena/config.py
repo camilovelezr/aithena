@@ -2,7 +2,10 @@
 
 from polus.aithena.common.logger import get_logger
 from pathlib import Path
+from dotenv import load_dotenv
 import os
+
+load_dotenv(override=True)
 
 logger = get_logger(__name__)
 
@@ -13,6 +16,8 @@ LOGFIRE_SERVICE_NAME = os.environ.get(
 )
 LOGFIRE_SERVICE_VERSION = os.environ.get("LOGFIRE_SERVICE_VERSION", default="1.0.0")
 
+HTTPX_TIMEOUT = int(os.environ.get("HTTPX_TIMEOUT", default=30))
+
 LITELLM_URL = os.environ.get("LITELLM_URL", default="http://localhost:4000/v1")
 LITELLM_URL = LITELLM_URL.rstrip("/")
 if not LITELLM_URL.endswith("/v1"):
@@ -22,7 +27,7 @@ LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", default="sk-1212")
 PROMPTS_DIR = os.environ.get("PROMPTS_DIR", default="./prompts")
 PROMPTS_DIR = Path(PROMPTS_DIR).resolve()
 
-RESPONDER_MODEL = os.environ.get("RESPONDER_MODEL", default="llama3.1:8b")
+RESPONDER_MODEL = os.environ.get("RESPONDER_MODEL", default="gpt-4.1")
 RESPONDER_MODEL_FREQUENCY_PENALTY = os.environ.get(
     "RESPONDER_MODEL_FREQUENCY_PENALTY", default=None
 )
@@ -49,7 +54,7 @@ RESPONDER_MODEL_PARAMS = {
 }
 RESPONDER_MODEL_PARAMS = {k: v for k, v in RESPONDER_MODEL_PARAMS.items() if v is not None}
 
-TALKER_MODEL = os.environ.get("TALKER_MODEL", default="llama3.1:8b")
+TALKER_MODEL = os.environ.get("TALKER_MODEL", default="gpt-4.1")
 TALKER_MODEL_FREQUENCY_PENALTY = os.environ.get(
     "TALKER_MODEL_FREQUENCY_PENALTY", default=None
 )
@@ -76,7 +81,7 @@ TALKER_MODEL_PARAMS = {
 }
 TALKER_MODEL_PARAMS = {k: v for k, v in TALKER_MODEL_PARAMS.items() if v is not None}
 
-SEMANTICS_MODEL = os.environ.get("SEMANTICS_MODEL", default="llama3.2")
+SEMANTICS_MODEL = os.environ.get("SEMANTICS_MODEL", default="mistral-small3.2")
 SEMANTICS_TEMPERATURE = float(os.environ.get("SEMANTICS_TEMPERATURE", default=0.2))
 
 SHIELD_MODEL = os.environ.get("SHIELD_MODEL", default="o4-mini")
@@ -84,12 +89,12 @@ SHIELD_TEMPERATURE = float(os.environ.get("SHIELD_TEMPERATURE", default=0.2))
 
 AEGIS_ORCHESTRATOR_MODEL = os.environ.get("AEGIS_ORCHESTRATOR_MODEL", default="o4-mini")
 AEGIS_ORCHESTRATOR_TEMPERATURE = float(os.environ.get("AEGIS_ORCHESTRATOR_TEMPERATURE", default=0.2))
-AEGIS_REFEREE_MODEL = os.environ.get("AEGIS_REFEREE_MODEL", default="azure-gpt-4o")
+AEGIS_REFEREE_MODEL = os.environ.get("AEGIS_REFEREE_MODEL", default="o3")
 AEGIS_REFEREE_TEMPERATURE = float(os.environ.get("AEGIS_REFEREE_TEMPERATURE", default=0.3))
 
 ARCTIC_HOST = os.environ.get("ARCTIC_HOST", default="localhost")
 ARCTIC_PORT = os.environ.get("ARCTIC_PORT", default=8000)
-EMBEDDING_TABLE = os.environ.get("EMBEDDING_TABLE", "openalex.nomic_embed_text_768")
+EMBEDDING_TABLE = os.environ.get("EMBEDDING_TABLE", "openalex.abstract_embeddings_arctic")
 SIMILARITY_N = int(os.environ.get("SIMILARITY_N", default=10))
 
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")

@@ -199,7 +199,7 @@ async def owl_ask(
         async with responder_agent.run_stream(
             f"""
             <question>{query}</question>
-            <context>{context.to_llm_context()}</context>
+            {context.to_llm_context()}
             """
         ) as response:
             await publish_status(rabbit_router.broker, "responding", None, session_id)
@@ -260,7 +260,7 @@ async def shield_ask(
         async with responder_agent.run_stream(
             f"""
             <question>{query}</question>
-            <context>{context.to_llm_context()}</context>
+            {context.to_llm_context()}
             """
         ) as response:
             await rabbit_router.broker.publish(
@@ -319,7 +319,7 @@ async def aegis_ask(
         async with responder_agent.run_stream(
             f"""
             <question>{query}</question>
-            <context>{context.to_llm_context()}</context>
+            {context.to_llm_context()}
             """
         ) as response:
             await rabbit_router.broker.publish(
@@ -357,7 +357,7 @@ async def talker_talk(
     async def run_talker(context: Context):
         async with talker_agent.run_stream(
             f"""
-            <context>{context.to_llm_context()}</context>
+            {context.to_llm_context()}
             <history>{json.dumps(request.history)}</history>
             """
         ) as response:

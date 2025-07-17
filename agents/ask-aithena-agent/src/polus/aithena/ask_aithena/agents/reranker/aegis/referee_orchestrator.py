@@ -100,7 +100,7 @@ async def score_work(
         query=ctx.deps.query, work=ctx.deps.works.works_for_reranker[index]
     )
     res = await referee_agent.run(effective_prompt, deps=deps)
-    return AegisRerankedWork(index=index, score=res.data.score, reason=res.data.reason)
+    return AegisRerankedWork(index=index, score=res.output.score, reason=res.output.reason)
 
 
 @aegis_reranker_agent.tool
@@ -150,10 +150,10 @@ async def aegis_rerank_context(
                     query=query, works=context, broker=broker, session_id=session_id
                 ),
             )
-            logger.info(f"Reranked data: {reranked_data.data}")
-            reranker_inds = [x.index for x in reranked_data.data]
-            reranker_scores = [x.score for x in reranked_data.data]
-            reranker_reasons = [x.reason for x in reranked_data.data]
+            logger.info(f"Reranked data: {reranked_data.output}")
+            reranker_inds = [x.index for x in reranked_data.output]
+            reranker_scores = [x.score for x in reranked_data.output]
+            reranker_reasons = [x.reason for x in reranked_data.output]
             context.reranked_indices = reranker_inds
             context.reranked_scores = reranker_scores
             context.reranked_reasons = reranker_reasons
@@ -167,10 +167,10 @@ async def aegis_rerank_context(
                 query=query, works=context, broker=broker, session_id=session_id
             ),
         )
-        logger.info(f"Reranked data: {reranked_data.data}")
-        reranker_inds = [x.index for x in reranked_data.data]
-        reranker_scores = [x.score for x in reranked_data.data]
-        reranker_reasons = [x.reason for x in reranked_data.data]
+        logger.info(f"Reranked data: {reranked_data.output}")
+        reranker_inds = [x.index for x in reranked_data.output]
+        reranker_scores = [x.score for x in reranked_data.output]
+        reranker_reasons = [x.reason for x in reranked_data.output]
         context.reranked_indices = reranker_inds
         context.reranked_scores = reranker_scores
         context.reranked_reasons = reranker_reasons

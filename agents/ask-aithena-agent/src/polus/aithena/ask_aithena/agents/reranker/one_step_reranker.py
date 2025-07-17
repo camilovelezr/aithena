@@ -26,24 +26,22 @@ logger = get_logger(__name__)
 
 PROMPTS_DIR = PROMPTS_DIR.joinpath("reranker")
 RERANKER_AGENT_PROMPT = Path(PROMPTS_DIR, "one_step_agent.txt").read_text()
-RERANKER_CREATE_PROMPT = orjson.loads(
-    Path(PROMPTS_DIR, "create_prompt.json").read_text()
-)
-RERANKER_DESCRIBE_WORKS_PROMPT = orjson.loads(
-    Path(PROMPTS_DIR, "describe_works.json").read_text()
-)
-RERANKER_DEFINE_TOPIC_PROMPT = orjson.loads(
-    Path(PROMPTS_DIR, "define_topic.json").read_text()
-)
+# RERANKER_CREATE_PROMPT = orjson.loads(
+#     Path(PROMPTS_DIR, "create_prompt.json").read_text()
+# )
+# RERANKER_DESCRIBE_WORKS_PROMPT = orjson.loads(
+#     Path(PROMPTS_DIR, "describe_works.json").read_text()
+# )
+# RERANKER_DEFINE_TOPIC_PROMPT = orjson.loads(
+#     Path(PROMPTS_DIR, "define_topic.json").read_text()
+# )
+RERANKER_CREATE_PROMPT = Path(PROMPTS_DIR, "create_prompt.txt").read_text()
+RERANKER_DESCRIBE_WORKS_PROMPT = Path(PROMPTS_DIR, "describe_works.txt").read_text()
+RERANKER_DEFINE_TOPIC_PROMPT = Path(PROMPTS_DIR, "define_topic.txt").read_text()
 
 
 class RerankerDeps(BaseModel):
-    """Query and context for the reranker.
-
-    Args:
-        query: The original user query
-        context: The Context object
-    """
+    """Query and context for the reranker."""
 
     query: str = Field(..., description="The original user query")
     context: Context = Field(
@@ -82,17 +80,27 @@ async def prepare_prompt(ctx: RunContext[RerankerDeps]) -> str:
 
 
 @reranker_agent.tool
-async def verify_result_list(ctx: RunContext[RerankerDeps], result: list) -> bool:
-    """
-    Verify the length of the result indices list and the uniqueness of the indices.
-    This tool also verifies that the order of the indices is correct.
-    ALWAYS run this tool after using call_reranker tool to verify
-    the result of the reranking.
+async def verify_result_list(ctx: RunContext[RerankerDeps], result: list[dict]) -> bool:
+    """Validates the reranked result list for length, uniqueness, score range, and order.
 
-    If the length of the result indices list is not equal to the number of works in the original list of works,
-    you will need to call call_reranker tool again, adding "make sure your result contains X UNIQUE indices in [0,1] and
-    that the order of the results is from most relevant to least relevant" to the argument
-    'prompt', where X is the number of works in the original list of works.
+    This tool should ALWAYS be run after using the `call_reranker` tool to ensure the reranking output is valid.
+
+    Args:
+        ctx (RunContext[RerankerDeps]): The context containing the original query and works.
+        result (list): The reranked list of works, each with an 'index' and 'score'.
+
+    Returns:
+        bool: True if the result list is valid, False otherwise.
+
+    Validation Criteria:
+        - The length of the result list must match the number of works in the original context.
+        - All indices in the result must be unique.
+        - All scores must be between 0 and 1 (inclusive).
+        - The scores must be sorted in descending order (most relevant to least relevant).
+
+    If the result fails any of these checks, you should call the `call_reranker` tool again,
+    and update the prompt to instruct: "make sure your result contains X UNIQUE indices in [0,1] and
+    that the order of the results is from most relevant to least relevant", where X is the number of works.
     """
     if len(result) != len(ctx.deps.context.documents):
         return False
@@ -106,34 +114,32 @@ async def verify_result_list(ctx: RunContext[RerankerDeps], result: list) -> boo
     return True
 
 
-class DefineTopicInput(BaseIOSchema):
+class DefineTopicDeps(BaseModel):
     """User's original query, we want to extract the main topic from this query."""
 
     query: str = Field(..., description="The original user query")
 
 
-class DefineTopicOutput(BaseIOSchema):
+class DefineTopicOutput(BaseModel):
     """The main broad topic of the user's original query that we extracted."""
 
     broad_topic: str = Field(..., description="The main broad topic of the query")
 
-
-define_topic_agent = BaseAgent(
-    BaseAgentConfig(
-        client=instructor.from_openai(
-            openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
-        ),
-        model="llama3.2",
-        temperature=SHIELD_TEMPERATURE,
-        system_prompt_generator=SystemPromptGenerator(
-            background=RERANKER_DEFINE_TOPIC_PROMPT["background"],
-            steps=RERANKER_DEFINE_TOPIC_PROMPT["steps"],
-            output_instructions=RERANKER_DEFINE_TOPIC_PROMPT["output_instructions"],
-        ),
-        input_schema=DefineTopicInput,
-        output_schema=DefineTopicOutput,
-    )
+define_topic_agent = Agent(
+    model=model,
+    system_prompt=RERANKER_DEFINE_TOPIC_PROMPT,
+    deps_type=DefineTopicDeps,
+    instrument=USE_LOGFIRE,
+    output_type=DefineTopicOutput,
+    model_settings=ModelSettings(temperature=SHIELD_TEMPERATURE),
 )
+
+@define_topic_agent.system_prompt
+async def system_prompt(ctx: RunContext[DefineTopicDeps]) -> str:
+    return f"""
+    <query>{ctx.deps.query}</query>
+    """
+
 
 
 @reranker_agent.tool
@@ -143,18 +149,21 @@ async def define_broad_topic(ctx: RunContext[RerankerDeps]) -> str:
     For example, if query is "What is the best treatment for depression?",
     the broad topic could be "clinical depression" or "mental health" or "medicine".
     """
-    res = define_topic_agent.run(DefineTopicInput(query=ctx.deps.query))
-    return res.broad_topic
+    res = await define_topic_agent.run(
+        "You are an expert in defining the main broad topic of a user's query",
+        deps=DefineTopicDeps(query=ctx.deps.query),
+    )
+    return res.output.broad_topic
 
 
-class DescribeWorksInput(BaseIOSchema):
+class DescribeWorksDeps(BaseModel):
     """The original list of works, we want to describe each work in a concise manner."""
 
     works: str = Field(..., description="The original list of works")
     query: str = Field(..., description="The original user query")
 
 
-class DescribeWorksOutput(BaseIOSchema):
+class DescribeWorksOutput(BaseModel):
     """The description of the works in a concise manner."""
 
     description: str = Field(
@@ -163,22 +172,15 @@ class DescribeWorksOutput(BaseIOSchema):
     )
 
 
-describe_works_agent = BaseAgent(
-    BaseAgentConfig(
-        client=instructor.from_openai(
-            openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
-        ),
-        model=SHIELD_MODEL,
-        system_prompt_generator=SystemPromptGenerator(
-            background=RERANKER_DESCRIBE_WORKS_PROMPT["background"],
-            steps=RERANKER_DESCRIBE_WORKS_PROMPT["steps"],
-            output_instructions=RERANKER_DESCRIBE_WORKS_PROMPT["output_instructions"],
-        ),
-        input_schema=DescribeWorksInput,
-        output_schema=DescribeWorksOutput,
-        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
-    )
+describe_works_agent = Agent(
+    model=model,
+    system_prompt=RERANKER_DESCRIBE_WORKS_PROMPT,
+    deps_type=DescribeWorksDeps,
+    instrument=USE_LOGFIRE,
+    output_type=DescribeWorksOutput,
+    model_settings=ModelSettings(temperature=SHIELD_TEMPERATURE),
 )
+
 
 
 @reranker_agent.tool
@@ -186,17 +188,17 @@ async def describe_works(ctx: RunContext[RerankerDeps]) -> str:
     """
     Describe the works in a concise manner.
     """
-    res = describe_works_agent.run(
-        DescribeWorksInput(
-            works=f"<works>{ctx.deps.context.to_works_for_reranker()}</works>",
-            query=f"<query>{ctx.deps.query}</query>",
-        )
+    res = await describe_works_agent.run(
+        "You are an expert in describing works in a concise manner",
+        deps=DescribeWorksDeps(
+            works=ctx.deps.context.to_works_for_reranker(), query=ctx.deps.query
+        ),
     )
-    return res.description
+    return res.output.description
 
 
-class CreateRerankerPromptInput(BaseIOSchema):
-    """Input for the reranker prompt agent that contains the original list of works, the main broad topic of the query, and the description of the works."""
+class CreateRerankerPromptDeps(BaseModel):
+    "Input for the reranker prompt agent."
 
     works: str = Field(..., description="The original list of works as a single string")
     broad_topic: str = Field(
@@ -207,28 +209,27 @@ class CreateRerankerPromptInput(BaseIOSchema):
     )
 
 
-class CreateRerankerPromptOutput(BaseIOSchema):
-    """The generated prompt for the reranker."""
+class CreateRerankerPromptOutput(BaseModel):
+    "The generated prompt for the reranker."
 
     prompt: str = Field(..., description="The generated prompt for the reranker")
 
-
-create_reranker_prompt_agent = BaseAgent(
-    BaseAgentConfig(
-        client=instructor.from_openai(
-            openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
-        ),
-        model=SHIELD_MODEL,
-        system_prompt_generator=SystemPromptGenerator(
-            background=RERANKER_CREATE_PROMPT["background"],
-            steps=RERANKER_CREATE_PROMPT["steps"],
-            output_instructions=RERANKER_CREATE_PROMPT["output_instructions"],
-        ),
-        input_schema=CreateRerankerPromptInput,
-        output_schema=CreateRerankerPromptOutput,
-        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
-    )
+create_reranker_prompt_agent = Agent(
+    model=model,
+    system_prompt=RERANKER_CREATE_PROMPT,
+    deps_type=CreateRerankerPromptDeps,
+    instrument=USE_LOGFIRE,
+    output_type=CreateRerankerPromptOutput,
+    model_settings=ModelSettings(temperature=SHIELD_TEMPERATURE),
 )
+
+@create_reranker_prompt_agent.system_prompt
+async def system_prompt(ctx: RunContext[CreateRerankerPromptDeps]) -> str:
+    return f"""
+    <works>{ctx.deps.works}</works>
+    <broad_topic>{ctx.deps.broad_topic}</broad_topic>
+    <description>{ctx.deps.description}</description>
+    """
 
 
 @reranker_agent.tool
@@ -244,18 +245,18 @@ async def create_reranker_prompt(
         broad_topic: The main broad topic of the query
         works_description: The concise description of the works
     """
-    res = create_reranker_prompt_agent.run(
-        CreateRerankerPromptInput(
-            works=f"<works>{ctx.deps.context.to_works_for_reranker()}</works>",
+    res = await create_reranker_prompt_agent.run(
+        deps=CreateRerankerPromptDeps(
+            works=ctx.deps.context.to_works_for_reranker(),
             broad_topic=broad_topic,
             description=works_description,
         )
     )
-    return res.prompt
+    return res.output.prompt
 
 
-class CallRerankerInput(BaseIOSchema):
-    """Input for the reranker agent that contains the original user query, the original list of works, and the prompt for the reranker."""
+class CallRerankerDeps(BaseModel):
+    "Input for the reranker agent."
 
     query: str = Field(..., description="The original user query")
     main_topic: str = Field(..., description="The main broad topic of the query")
@@ -266,36 +267,28 @@ class CallRerankerInput(BaseIOSchema):
     instructions: str = Field(..., description="The instructions for the reranker")
 
 
-class CallRerankerOutput(BaseIOSchema):
-    """The reranked list of works' indices."""
+class CallRerankerOutput(BaseModel):
+    "The reranked list of works' indices."
 
     reranked_works: list[RerankedWork] = Field(
         ..., description="The reranked list of works' indices and their scores"
     )
 
+CALL_RERANKER_PROMPT = """
+You are an expert in reranking works based on a user's query.
+Read the instructions and carefully implement all steps necessary.
+Make sure you follow the output format specified in instructions."
+"""
 
-call_reranker_agent = BaseAgent(
-    BaseAgentConfig(
-        client=instructor.from_openai(
-            openai.OpenAI(base_url=LITELLM_URL, api_key=LITELLM_API_KEY)
-        ),
-        model=SHIELD_MODEL,
-        system_prompt_generator=SystemPromptGenerator(
-            background=[
-                "You are an expert in reranking works based on a user's query."
-            ],
-            steps=[
-                "Read the instructions and carefully implement all steps necessary."
-            ],
-            output_instructions=[
-                "Make sure you follow the output format specified in instructions."
-            ],
-        ),
-        input_schema=CallRerankerInput,
-        output_schema=CallRerankerOutput,
-        model_api_parameters={"temperature": SHIELD_TEMPERATURE},
-    )
+call_reranker_agent = Agent(
+    model=model,
+    system_prompt=CALL_RERANKER_PROMPT,
+    deps_type=CallRerankerDeps,
+    instrument=USE_LOGFIRE,
+    output_type=CallRerankerOutput,
+    model_settings=ModelSettings(temperature=SHIELD_TEMPERATURE),
 )
+
 
 
 @reranker_agent.tool
@@ -307,15 +300,16 @@ async def call_reranker(
 ) -> list:
     """
     Call the reranker with the prompt generated by create_reranker_prompt tool
-    You will need to pass the original list of works, the main broad topic of the query, and the description of the works to the reranker.
+    You will need to pass the original list of works, the main broad topic
+    of the query, and the description of the works to the reranker.
 
     Args:
         main_topic: The main broad topic of the query generated by define_broad_topic tool
         works_description: The concise description of the works generated by describe_works tool
         prompt: The prompt for the reranker, generated by create_reranker_prompt tool
     """
-    res = call_reranker_agent.run(
-        CallRerankerInput(
+    res = await call_reranker_agent.run(
+        deps=CallRerankerDeps(
             query=ctx.deps.query,
             main_topic=main_topic,
             works=ctx.deps.context.to_works_for_reranker(),
@@ -323,7 +317,7 @@ async def call_reranker(
             instructions=prompt,
         )
     )
-    return res.reranked_works
+    return res.output.reranked_works
 
 
 async def rerank_context(query: str, context: Context) -> Context:
@@ -333,12 +327,11 @@ async def rerank_context(query: str, context: Context) -> Context:
             logger.info(f"One Step Reranking context for query: {query}")
             logger.info(f"Context: {context.model_dump_json()}")
             reranked_data = await reranker_agent.run(
-                "You are an expert reranker who's super careful",
                 deps=RerankerDeps(query=query, context=context),
             )
-            logger.info(f"Reranked data: {reranked_data.data}")
-            reranker_inds = [x.index for x in reranked_data.data]
-            reranker_scores = [x.score for x in reranked_data.data]
+            logger.info(f"Reranked data: {reranked_data.output}")
+            reranker_inds = [x.index for x in reranked_data.output]
+            reranker_scores = [x.score for x in reranked_data.output]
             context.reranked_indices = reranker_inds
             context.reranked_scores = reranker_scores
             return context
@@ -346,12 +339,11 @@ async def rerank_context(query: str, context: Context) -> Context:
         logger.info(f"One Step Reranking context for query: {query}")
         logger.info(f"Context: {context.model_dump_json()}")
         reranked_data = await reranker_agent.run(
-            "You are an expert reranker who's super careful",
             deps=RerankerDeps(query=query, context=context),
         )
-        logger.info(f"Reranked data: {reranked_data.data}")
-        reranker_inds = [x.index for x in reranked_data.data]
-        reranker_scores = [x.score for x in reranked_data.data]
+        logger.info(f"Reranked data: {reranked_data.output}")
+        reranker_inds = [x.index for x in reranked_data.output]
+        reranker_scores = [x.score for x in reranked_data.output]
         context.reranked_indices = reranker_inds
         context.reranked_scores = reranker_scores
         return context

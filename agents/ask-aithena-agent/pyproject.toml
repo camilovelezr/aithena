@@ -1,6 +1,6 @@
 [project]
 name = "ask-aithena-agent"
-version = "1.1.0"
+version = "1.1.1"
 description = "Ask AIthena Agent and Workflow"
 authors = [{name="Camilo Velez", email="camilo.velezramirez@nih.gov"}, {name="Antoine Gerardin", email="antoine.gerardin@nih.gov"}]
 requires-python = ">=3.12,<3.13"
@@ -12,7 +12,6 @@ dependencies = [
     "qdrant-client>=1.11.3,<2",
     "openai>=1.65.5,<2",
     "orjson>=3.10.15,<4",
-    "pydantic-ai>=0.4.2",
     "spacy>=3.8.4,<4",
     "en_core_web_md",
     "scikit-learn>=1.6.1,<2",
@@ -21,8 +20,8 @@ dependencies = [
     "aithena-embeddings",
     "logfire[fastapi,httpx]>=3.5.1",
     "httpx>=0.28.1",
-    "atomic-agents>=1.1.11",
     "redis>=6.2.0",
+    "pydantic-ai>=0.4.3",
 ]
 
 [project.scripts]

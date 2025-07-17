@@ -5,6 +5,7 @@ from polus.aithena.ask_aithena.config import (
     EMBEDDING_TABLE,
     ARCTIC_HOST,
     ARCTIC_PORT,
+    HTTPX_TIMEOUT,
 )
 from polus.aithena.ask_aithena.logfire_logger import logfire
 from polus.aithena.common.logger import get_logger
@@ -56,7 +57,7 @@ async def get_similar_works_async(
             routing_key=session_id,
         )
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             logfire.instrument_httpx(client)
             response = await client.post(
                 f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
