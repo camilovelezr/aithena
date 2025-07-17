@@ -28,6 +28,13 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
     const [hideStatusAfterResponding, setHideStatusAfterResponding] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [responseStartTime, setResponseStartTime] = useState<Date | null>(null);
+    
+    // Store shared references from the first assistant message
+    const [sharedReferences, setSharedReferences] = useState<string | null>(null);
+    
+    // Global tooltip state - only one tooltip can exist at a time
+    const [globalTooltip, setGlobalTooltip] = useState<{ ref: any; x: number; y: number } | null>(null);
+    const hideTooltipTimeout = useRef<NodeJS.Timeout | null>(null);
 
     // Calculate the line height of the textarea dynamically
     const [lineHeight, setLineHeight] = useState(20); // Default estimate
@@ -67,6 +74,40 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             resizeTextarea();
         }
     }, [loading, mounted]);
+
+    // Cleanup tooltip timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (hideTooltipTimeout.current) {
+                clearTimeout(hideTooltipTimeout.current);
+            }
+        };
+    }, []);
+    
+    // Global tooltip handlers
+    const showTooltip = (ref: any, x: number, y: number) => {
+        // Clear any existing hide timeout
+        if (hideTooltipTimeout.current) {
+            clearTimeout(hideTooltipTimeout.current);
+            hideTooltipTimeout.current = null;
+        }
+        setGlobalTooltip({ ref, x, y });
+    };
+    
+    const hideTooltip = () => {
+        // Add a small delay before hiding to prevent flickering
+        hideTooltipTimeout.current = setTimeout(() => {
+            setGlobalTooltip(null);
+        }, 100);
+    };
+    
+    const hideTooltipImmediately = () => {
+        if (hideTooltipTimeout.current) {
+            clearTimeout(hideTooltipTimeout.current);
+            hideTooltipTimeout.current = null;
+        }
+        setGlobalTooltip(null);
+    };
 
     // Resize textarea based on content
     const resizeTextarea = () => {
@@ -232,6 +273,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             // Apply references if found (only for initial responses)
             if (referencesPart.trim() && !hasConversationStarted) {
                 addReferencesToLastAssistantMessage(referencesPart.trim());
+                // Store references for sharing with subsequent messages
+                setSharedReferences(referencesPart.trim());
                 if (!hasUserScrolled.current) {
                     updateMessageAndScroll(assistantMessage);
                 } else {
@@ -325,15 +368,21 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                                     (index === messages.length - 1 ||
                                         (index === messages.length - 2 && messages[messages.length - 1].role === 'assistant'));
 
-                                // Only show user messages and assistant messages if we're responding
+                                // Show all messages - user messages always, assistant messages if they have content or are being responded to
                                 const isRespondingStatus = statusUpdates.length > 0 &&
                                     statusUpdates[statusUpdates.length - 1].status === 'responding';
                                 const shouldShowMessage = message.role === 'user' ||
-                                    (message.role === 'assistant' && isRespondingStatus);
+                                    (message.role === 'assistant' && (message.content || isRespondingStatus));
 
                                 return shouldShowMessage ? (
                                     <React.Fragment key={message.id}>
-                                        <MessageItem message={message} />
+                                        <MessageItem 
+                                            message={message} 
+                                            sharedReferences={message.role === 'assistant' && !message.references ? sharedReferences : null}
+                                            onShowTooltip={showTooltip}
+                                            onHideTooltip={hideTooltip}
+                                            onHideTooltipImmediately={hideTooltipImmediately}
+                                        />
 
                                         {/* Show ProcessingStatusCard after the last user message during loading and even after responding starts */}
                                         {isLastUserMessage && (
@@ -431,6 +480,40 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     </motion.p>
                 </form>
             </div>
+            
+            {/* Global Tooltip - only one can exist at a time */}
+            {globalTooltip && (
+                <div
+                    className="citation-tooltip fixed z-50 bg-white/95 dark:bg-gray-950/98 shadow-lg rounded-md p-3.5 text-sm max-w-xs backdrop-blur-sm"
+                    style={{
+                        top: `${globalTooltip.y - 5}px`,
+                        left: `${(() => {
+                            const viewportWidth = window.innerWidth;
+                            let left = globalTooltip.x;
+                            // If tooltip would go off right edge, place it to the left
+                            if (left + 300 > viewportWidth) {
+                                left = globalTooltip.x - 310;
+                            }
+                            return left;
+                        })()}px`,
+                        pointerEvents: 'none'
+                    }}
+                >
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {globalTooltip.ref.title}
+                    </div>
+                    {globalTooltip.ref.year && (
+                        <div className="text-gray-700 dark:text-gray-300 text-xs mt-1">
+                            ({globalTooltip.ref.year})
+                        </div>
+                    )}
+                    {globalTooltip.ref.authors && globalTooltip.ref.authors.length > 0 && (
+                        <div className="text-gray-700 dark:text-gray-300 text-xs mt-1.5 line-clamp-1">
+                            {globalTooltip.ref.authors.join(', ')}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

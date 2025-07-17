@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useEffect, useState, useRef } from 'react';
+import React, { FC, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -24,349 +24,223 @@ interface Reference {
 
 interface MessageItemProps {
     message: Message;
+    sharedReferences?: string | null;
+    onShowTooltip?: (ref: any, x: number, y: number) => void;
+    onHideTooltip?: () => void;
+    onHideTooltipImmediately?: () => void;
 }
 
-const MessageItem: FC<MessageItemProps> = ({ message }) => {
+const MessageItem: FC<MessageItemProps> = ({ 
+    message, 
+    sharedReferences,
+    onShowTooltip,
+    onHideTooltip,
+    onHideTooltipImmediately
+}) => {
     const isUser = message.role === 'user';
     const [mounted, setMounted] = useState(false);
     const { processMarkdown } = useMarkdown();
     const [references, setReferences] = useState<Reference[]>([]);
     const messageContentRef = useRef<HTMLDivElement>(null);
-
+    
+    // Determine if this is a new message (less than 2 seconds old)
+    const isNewMessage = useRef(false);
+    
     useEffect(() => {
+        // Check if message was created recently (within 2 seconds)
+        if (message.timestamp) {
+            const messageTime = new Date(message.timestamp).getTime();
+            const currentTime = new Date().getTime();
+            isNewMessage.current = (currentTime - messageTime) < 2000;
+        } else {
+            // If no timestamp, assume it's not new (existing message)
+            isNewMessage.current = false;
+        }
+        
         setMounted(true);
 
         // Parse references when component mounts
-        if (message.references && !isUser) {
-            try {
-                const refs = JSON.parse(message.references) as Reference[];
-                setReferences(refs);
-            } catch (e) {
-                console.error("Failed to parse references:", e);
+        if (!isUser) {
+            // Use message references if available, otherwise use shared references
+            const referencesToParse = message.references || sharedReferences;
+            if (referencesToParse) {
+                try {
+                    const refs = JSON.parse(referencesToParse) as Reference[];
+                    setReferences(refs);
+                } catch (e) {
+                    console.error("Failed to parse references:", e);
+                }
             }
         }
-    }, [message.references, isUser]);
-
-    // Process citations after content is rendered
-    useEffect(() => {
-        if (mounted && !isUser && messageContentRef.current) {
-            // Find all citation patterns in text nodes
-            const findAndProcessCitations = () => {
-                // Create a map of reference indexes for quick lookup
-                const refMap = new Map(references.map(ref => [ref.index.toString(), ref]));
-
-                // A flag to track if any citations were processed
-                let citationsProcessed = false;
-
-                // Process text nodes within the content
-                const walkTextNodes = (node: Node) => {
-                    if (node.nodeType === Node.TEXT_NODE) {
-                        const text = node.textContent || '';
-                        let modifiedText = text;
-                        const fragment = document.createDocumentFragment();
-                        let hasChanges = false;
-
-                        // Combined regex for both patterns
-                        // Matches both (1) and (1, 2, 3) patterns
-                        const combinedRegex = /\((\d+(?:\s*,\s*\d+)*)\)/g;
-                        let match;
-                        let lastIndex = 0;
-
-                        while ((match = combinedRegex.exec(text)) !== null) {
-                            hasChanges = true;
-                            citationsProcessed = true;
-                            const fullMatch = match[0];  // e.g. "(1)" or "(1, 4, 9)"
-                            const citationContent = match[1]; // e.g. "1" or "1, 4, 9"
-                            const matchIndex = match.index;
-
-                            // Add text before the citation
-                            if (matchIndex > lastIndex) {
-                                fragment.appendChild(document.createTextNode(text.substring(lastIndex, matchIndex)));
-                            }
-
-                            // Check if this is a grouped citation or individual citation
-                            if (citationContent.includes(',')) {
-                                // Grouped citation like (1, 4, 9)
-                                const groupSpan = document.createElement('span');
-                                groupSpan.className = 'citation-group';
-                                groupSpan.style.opacity = '1'; // Set initial opacity
-
-                                // Add opening parenthesis
-                                groupSpan.appendChild(document.createTextNode('('));
-
-                                // Process each number in the group
-                                const citationNumbers = citationContent.split(',').map(n => n.trim());
-                                citationNumbers.forEach((num, idx) => {
-                                    const ref = refMap.get(num);
-
-                                    // Create span for this citation
-                                    const citationSpan = document.createElement('span');
-                                    citationSpan.className = 'citation-ref';
-                                    citationSpan.setAttribute('data-citation-id', num);
-                                    citationSpan.textContent = num;
-                                    citationSpan.style.opacity = '1'; // Set initial opacity
-
-                                    // Add hover/click events if we have a matching reference
-                                    if (ref) {
-                                        addCitationEvents(citationSpan, ref);
-                                    }
-
-                                    // Add the citation span to the group
-                                    groupSpan.appendChild(citationSpan);
-
-                                    // Add comma if not the last item
-                                    if (idx < citationNumbers.length - 1) {
-                                        groupSpan.appendChild(document.createTextNode(', '));
-                                    }
-                                });
-
-                                // Add closing parenthesis
-                                groupSpan.appendChild(document.createTextNode(')'));
-
-                                // Add the group span to the fragment
-                                fragment.appendChild(groupSpan);
-                            } else {
-                                // Individual citation like (1)
-                                const citationNumber = citationContent;
-
-                                // Create the citation span
-                                const citationSpan = document.createElement('span');
-                                citationSpan.className = 'citation-ref';
-                                citationSpan.setAttribute('data-citation-id', citationNumber);
-                                citationSpan.textContent = fullMatch;
-                                citationSpan.style.opacity = '1'; // Set initial opacity
-
-                                // Add hover events only if we have a matching reference
-                                const ref = refMap.get(citationNumber);
-                                if (ref) {
-                                    addCitationEvents(citationSpan, ref);
+    }, [message.references, isUser, message.timestamp, sharedReferences]);
+    
+    // Create a map of reference indexes for quick lookup
+    const refMap = useMemo(() => {
+        return new Map(references.map(ref => [ref.index.toString(), ref]));
+    }, [references]);
+    
+    // Custom text renderer that processes citations
+    const renderTextWithCitations = useCallback((text: string) => {
+        if (!text || isUser) return text;
+        
+        // Combined regex for both patterns - now also catches citations with spaces
+        const combinedRegex = /\(\s*(\d+(?:\s*,\s*\d+)*)\s*\)/g;
+        const parts: (string | React.ReactElement)[] = [];
+        let lastIndex = 0;
+        let match;
+        let keyIndex = 0;
+        
+        while ((match = combinedRegex.exec(text)) !== null) {
+            const fullMatch = match[0];  // e.g. "(1)" or "(1, 4, 9)" or "( 1 )"
+            const citationContent = match[1]; // e.g. "1" or "1, 4, 9"
+            const matchIndex = match.index;
+            
+            // Add text before the citation
+            if (matchIndex > lastIndex) {
+                parts.push(text.substring(lastIndex, matchIndex));
+            }
+            
+            // Check if this is a grouped citation or individual citation
+            if (citationContent.includes(',')) {
+                // Grouped citation like (1, 4, 9)
+                const citationNumbers = citationContent.split(',').map(n => n.trim());
+                const groupElements: React.ReactElement[] = [<span key={`group-open-${keyIndex++}`}>(</span>];
+                
+                citationNumbers.forEach((num, idx) => {
+                    const ref = refMap.get(num);
+                    
+                    groupElements.push(
+                        <span
+                            key={`citation-${keyIndex++}`}
+                            className="citation-ref"
+                            data-citation-id={num}
+                            onMouseEnter={(e) => {
+                                if (ref && onShowTooltip) {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    onShowTooltip(ref, rect.right + 5, rect.top);
                                 }
-
-                                // Add the citation span to the fragment
-                                fragment.appendChild(citationSpan);
-                            }
-
-                            // Update the last index
-                            lastIndex = matchIndex + fullMatch.length;
-                        }
-
-                        // If we found matches, add any remaining text and replace the node
-                        if (hasChanges) {
-                            if (lastIndex < text.length) {
-                                fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
-                            }
-
-                            node.parentNode?.replaceChild(fragment, node);
-                            return true;
-                        }
-                    } else {
-                        // Don't process code blocks or pre elements
-                        const element = node as HTMLElement;
-                        if (element.tagName === 'CODE' || element.tagName === 'PRE') {
-                            return false;
-                        }
-
-                        // Process children recursively
-                        const childNodes = Array.from(node.childNodes);
-                        for (const child of childNodes) {
-                            walkTextNodes(child);
-                        }
+                            }}
+                            onMouseLeave={() => {
+                                if (onHideTooltip) {
+                                    onHideTooltip();
+                                }
+                            }}
+                            onClick={() => {
+                                if (ref && onHideTooltipImmediately) {
+                                    onHideTooltipImmediately();
+                                    handleCitationClick(ref);
+                                }
+                            }}
+                            style={{ cursor: ref ? 'pointer' : 'default' }}
+                        >
+                            {num}
+                        </span>
+                    );
+                    
+                    if (idx < citationNumbers.length - 1) {
+                        groupElements.push(<span key={`comma-${keyIndex++}`}>, </span>);
                     }
-                    return false;
-                };
-
-                // Helper function to add citation events (hover and click)
-                const addCitationEvents = (citationSpan: HTMLElement, ref: Reference) => {
-                    // Add hover events
-                    citationSpan.addEventListener('mouseenter', (e) => {
-                        createTooltip(e, ref);
-                    });
-
-                    citationSpan.addEventListener('mouseleave', () => {
-                        removeTooltips();
-                    });
-
-                    // Add click event to open references and scroll to the citation
-                    citationSpan.addEventListener('click', () => {
-                        removeTooltips();
-
-                        // Find the references details element
-                        const detailsElement = document.querySelector('.references-content')?.parentElement;
-                        if (detailsElement && detailsElement instanceof HTMLDetailsElement) {
-                            // Open the details if it's closed
-                            if (!detailsElement.open) {
-                                detailsElement.open = true;
+                });
+                
+                groupElements.push(<span key={`group-close-${keyIndex++}`}>)</span>);
+                
+                parts.push(
+                    <span key={`group-${keyIndex++}`} className="citation-group">
+                        {groupElements}
+                    </span>
+                );
+            } else {
+                // Individual citation like (1)
+                const citationNumber = citationContent;
+                const ref = refMap.get(citationNumber);
+                
+                parts.push(
+                    <span
+                        key={`citation-${keyIndex++}`}
+                        className="citation-ref"
+                        data-citation-id={citationNumber}
+                        onMouseEnter={(e) => {
+                            if (ref && onShowTooltip) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                onShowTooltip(ref, rect.right + 5, rect.top);
                             }
-
-                            // Wait a tiny bit for the details to expand
-                            setTimeout(() => {
-                                // Find the reference element by index
-                                const refElement = document.querySelector(`.reference-item[data-ref-index="${ref.index}"]`);
-                                if (refElement) {
-                                    // Scroll the reference into view with smooth behavior
-                                    refElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    // Add a temporary highlight effect
-                                    refElement.classList.add('highlight-reference');
-                                    setTimeout(() => {
-                                        refElement.classList.remove('highlight-reference');
-                                    }, 2000);
-                                }
-                            }, 50);
-                        }
-                    });
-
-                    // Change cursor to indicate it's clickable
-                    citationSpan.style.cursor = 'pointer';
-                };
-
-                // Start processing from the content root
-                if (messageContentRef.current) {
-                    walkTextNodes(messageContentRef.current);
-                }
-            };
-
-            // Create tooltip for a reference
-            const createTooltip = (e: MouseEvent, ref: Reference) => {
-                // Remove existing tooltips first
-                removeTooltips();
-
-                const element = e.currentTarget as HTMLElement;
-
-                // Create tooltip
-                const tooltip = document.createElement('div');
-                tooltip.className = 'citation-tooltip absolute z-50 bg-white/95 dark:bg-gray-950/98 shadow-lg rounded-md p-3.5 text-sm max-w-xs backdrop-blur-sm';
-
-                // Position the tooltip based on element position
-                const rect = element.getBoundingClientRect();
-                const scrollTop = window.scrollY || document.documentElement.scrollTop;
-                const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-
-                // Calculate position to avoid going off-screen
-                const viewportWidth = window.innerWidth;
-                let left = rect.right + 5 + scrollLeft;
-
-                // If tooltip would go off right edge, place it to the left of the citation
-                if (left + 300 > viewportWidth) {
-                    left = rect.left - 305 + scrollLeft;
-                }
-
-                tooltip.style.top = `${rect.top + scrollTop - 5}px`;
-                tooltip.style.left = `${left}px`;
-
-                tooltip.innerHTML = `
-                    <div class="font-medium text-gray-900 dark:text-gray-100">${ref.title}</div>
-                    ${ref.year ? `<div class="text-gray-700 dark:text-gray-300 text-xs mt-1">(${ref.year})</div>` : ''}
-                    ${ref.authors && ref.authors.length > 0
-                        ? `<div class="text-gray-700 dark:text-gray-300 text-xs mt-1.5 line-clamp-1">${ref.authors.join(', ')}</div>`
-                        : ''}
-                `;
-
-                document.body.appendChild(tooltip);
-            };
-
-            // Remove all tooltips
-            const removeTooltips = () => {
-                const tooltips = document.querySelectorAll('.citation-tooltip');
-                tooltips.forEach(t => t.remove());
-            };
-
-            // Run our citation processor with a short delay to ensure content is rendered
-            setTimeout(findAndProcessCitations, 100);
-
-            // Add listener for sidebar toggle to reprocess citations
-            const handleReprocessCitations = () => {
-                // Instead of removing and recreating all citation spans (which causes jerking),
-                // we'll use a more efficient approach
-                if (messageContentRef.current) {
-                    // First, make all citations temporarily invisible to prevent flickering
-                    const existingCitations = messageContentRef.current.querySelectorAll('.citation-ref, .citation-group');
-                    existingCitations.forEach(citation => {
-                        if (citation instanceof HTMLElement) {
-                            // Save original opacity to restore later
-                            citation.dataset.originalOpacity = citation.style.opacity || '1';
-                            // Fade out smoothly
-                            citation.style.transition = 'opacity 0.1s ease';
-                            citation.style.opacity = '0';
-                        }
-                    });
-
-                    // Wait for fade out to complete, then reprocess
-                    setTimeout(() => {
-                        // Now we can safely reprocess the citations
-                        // Store the scroll position to restore it later
-                        const scrollTop = window.scrollY || document.documentElement.scrollTop;
-
-                        // Reset the HTML to remove citation spans
-                        existingCitations.forEach(citation => {
-                            const parent = citation.parentNode;
-                            if (parent && parent instanceof HTMLElement && parent.classList && parent.classList.contains('citation-group')) {
-                                // If this is in a citation group, replace the whole group with its text content
-                                const textContent = parent.textContent || '';
-                                const textNode = document.createTextNode(textContent);
-                                parent.parentNode?.replaceChild(textNode, parent);
-                            } else if (parent) {
-                                // Otherwise just replace the citation with its text content
-                                const textContent = citation.textContent || '';
-                                const textNode = document.createTextNode(textContent);
-                                parent.replaceChild(textNode, citation);
+                        }}
+                        onMouseLeave={() => {
+                            if (onHideTooltip) {
+                                onHideTooltip();
                             }
-                        });
-
-                        // Re-run the citation processor
-                        findAndProcessCitations();
-
-                        // Restore scroll position to prevent page jump
-                        window.scrollTo({
-                            top: scrollTop,
-                            behavior: 'auto' // Use 'auto' to prevent animation
-                        });
-
-                        // Fade in the new citations
-                        setTimeout(() => {
-                            const newCitations = messageContentRef.current?.querySelectorAll('.citation-ref, .citation-group');
-                            if (newCitations) {
-                                newCitations.forEach(citation => {
-                                    if (citation instanceof HTMLElement) {
-                                        citation.style.transition = 'opacity 0.2s ease';
-                                        citation.style.opacity = '0';
-                                        // Trigger reflow
-                                        citation.offsetHeight;
-                                        // Fade in
-                                        citation.style.opacity = '1';
-                                    }
-                                });
+                        }}
+                        onClick={() => {
+                            if (ref && onHideTooltipImmediately) {
+                                onHideTooltipImmediately();
+                                handleCitationClick(ref);
                             }
-                        }, 0);
-                    }, 100);
-                }
-            };
-
-            document.addEventListener('reprocessCitations', handleReprocessCitations);
-
-            // Clean up when unmounting
-            return () => {
-                removeTooltips();
-                document.removeEventListener('reprocessCitations', handleReprocessCitations);
-            };
+                        }}
+                        style={{ cursor: ref ? 'pointer' : 'default' }}
+                    >
+                        {fullMatch}
+                    </span>
+                );
+            }
+            
+            lastIndex = matchIndex + fullMatch.length;
         }
-    }, [mounted, references, isUser]);
+        
+        // Add any remaining text
+        if (lastIndex < text.length) {
+            parts.push(text.substring(lastIndex));
+        }
+        
+        // If no citations were found, return the original text
+        if (parts.length === 0) {
+            return text;
+        }
+        
+        return <>{parts}</>;
+    }, [isUser, refMap, onShowTooltip, onHideTooltip, onHideTooltipImmediately]);
+    
+    // Handle citation click
+    const handleCitationClick = useCallback((ref: Reference) => {
+        const detailsElement = document.querySelector('.references-content')?.parentElement;
+        if (detailsElement && detailsElement instanceof HTMLDetailsElement) {
+            // Open the details if it's closed
+            if (!detailsElement.open) {
+                detailsElement.open = true;
+            }
+            
+            // Wait a tiny bit for the details to expand
+            setTimeout(() => {
+                // Find the reference element by index
+                const refElement = document.querySelector(`.reference-item[data-ref-index="${ref.index}"]`);
+                if (refElement) {
+                    // Scroll the reference into view with smooth behavior
+                    refElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Add a temporary highlight effect
+                    refElement.classList.add('highlight-reference');
+                    setTimeout(() => {
+                        refElement.classList.remove('highlight-reference');
+                    }, 2000);
+                }
+            }, 50);
+        }
+    }, []);
 
     // Don't render until client-side
     if (!mounted) return null;
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={isNewMessage.current ? { opacity: 0, y: 10 } : { opacity: 1, y: 0 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
+            transition={isNewMessage.current ? { duration: 0.4, ease: "easeOut" } : { duration: 0 }}
             className="mb-8 w-full"
             layout={false}
         >
             <div className="px-4">
                 <motion.div
-                    initial={{ opacity: 0, x: isUser ? 20 : -20 }}
+                    initial={isNewMessage.current ? { opacity: 0, x: isUser ? 20 : -20 } : { opacity: 1, x: 0 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
+                    transition={isNewMessage.current ? { delay: 0.1 } : { duration: 0 }}
                     className={`text-base font-medium mb-2 text-gray-700 dark:text-gray-300 flex items-baseline gap-2 ${isUser ? 'justify-end' : ''}`}
                     layout={false}
                 >
@@ -389,9 +263,9 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
 
                 <div className={`flex ${isUser ? 'justify-end' : ''}`}>
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={isNewMessage.current ? { opacity: 0, y: 10 } : { opacity: 1, y: 0 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
+                        transition={isNewMessage.current ? { delay: 0.2 } : { duration: 0 }}
                         layout={false}
                         className={`p-5 rounded-2xl ${isUser
                             ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-lg inline-block max-w-[85%]'
@@ -405,43 +279,62 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                             <ReactMarkdown
                                 rehypePlugins={[rehypeHighlight, rehypeKatex]}
                                 remarkPlugins={[remarkGfm, remarkMath]}
-                                className={`prose dark:prose-invert max-w-none text-base whitespace-pre-line break-words ${isUser ? '!text-gray-900 dark:!text-white prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-code:text-gray-900 dark:prose-code:text-white' : ''}`}
+                                className={`prose dark:prose-invert max-w-none text-base break-words ${isUser ? '!text-gray-900 dark:!text-white prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-code:text-gray-900 dark:prose-code:text-white' : ''} markdown-content`}
                                 components={{
                                     h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h1 className="text-2xl font-bold mt-3 mb-2 first:mt-0" {...props}>{children}</h1>
+                                        <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>{children}</h1>
                                     ),
                                     h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h2 className="text-xl font-bold mt-3 mb-1.5" {...props}>{children}</h2>
+                                        <h2 className="text-2xl font-semibold mt-6 mb-3 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>{children}</h2>
                                     ),
                                     h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h3 className="text-lg font-bold mt-2 mb-1" {...props}>{children}</h3>
+                                        <h3 className="text-xl font-semibold mt-5 mb-2.5 text-gray-900 dark:text-gray-100 leading-snug" {...props}>{children}</h3>
                                     ),
                                     h4: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h4 className="text-base font-bold mt-2 mb-1" {...props}>{children}</h4>
+                                        <h4 className="text-lg font-medium mt-4 mb-2 text-gray-900 dark:text-gray-100 leading-snug" {...props}>{children}</h4>
                                     ),
                                     h5: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h5 className="text-sm font-bold mt-2 mb-1" {...props}>{children}</h5>
+                                        <h5 className="text-base font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100" {...props}>{children}</h5>
                                     ),
                                     h6: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h6 className="text-sm font-bold mt-2 mb-1" {...props}>{children}</h6>
+                                        <h6 className="text-sm font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100 uppercase tracking-wide" {...props}>{children}</h6>
                                     ),
                                     p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement> & { children: React.ReactNode }) => (
-                                        <p className="mt-0 mb-2 last:mb-0" {...props}>{children}</p>
+                                        <p className="mt-0 mb-4 last:mb-0 leading-relaxed text-gray-800 dark:text-gray-200" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </p>
                                     ),
+                                    text: ({ children }: { children: string }) => {
+                                        if (typeof children === 'string') {
+                                            return renderTextWithCitations(children);
+                                        }
+                                        return children;
+                                    },
                                     code: ({ className, children, inline, ...props }: { className?: string; children: React.ReactNode; inline?: boolean }) => {
                                         const match = /language-(\w+)/.exec(className || '');
                                         const language = match ? match[1] : '';
 
-                                        return (
+                                        return inline ? (
                                             <code
-                                                className={`${className ?? ''} ${inline
-                                                    ? `${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-black/10 dark:bg-white/10'} rounded px-1.5 py-0.5`
-                                                    : `${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-black/5 dark:bg-white/5'} block rounded-lg p-3 my-2 language-${language}`
-                                                    }`}
+                                                className={`${className ?? ''} ${isUser ? 'bg-gray-200 dark:bg-white/20' : 'bg-gray-800/50 dark:bg-gray-700/50'} rounded px-1.5 py-0.5 text-[0.9em] font-mono`}
                                                 {...props}
                                             >
                                                 {children}
                                             </code>
+                                        ) : (
+                                            <div className="my-4 overflow-hidden rounded-lg bg-gray-900 dark:bg-gray-950 shadow-md">
+                                                <code
+                                                    className={`${className ?? ''} block p-4 text-sm leading-relaxed overflow-x-auto language-${language}`}
+                                                    {...props}
+                                                >
+                                                    {children}
+                                                </code>
+                                            </div>
                                         );
                                     },
                                     table: ({ children, ...props }: React.HTMLAttributes<HTMLTableElement> & { children: React.ReactNode }) => (
@@ -463,19 +356,42 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
                                         </a>
                                     ),
                                     li: ({ children, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { children: React.ReactNode }) => (
-                                        <li className="my-0.5" {...props}>
-                                            {children}
+                                        <li className="my-1 pl-1 marker:text-gray-500 dark:marker:text-gray-400" {...props}>
+                                            <span className="block leading-relaxed">{children}</span>
                                         </li>
                                     ),
                                     ul: ({ children, ...props }: React.HTMLAttributes<HTMLUListElement> & { children: React.ReactNode }) => (
-                                        <ul className="list-disc pl-6 my-1.5" {...props}>
+                                        <ul className="list-disc pl-6 my-4 space-y-1" {...props}>
                                             {children}
                                         </ul>
                                     ),
                                     ol: ({ children, ...props }: React.HTMLAttributes<HTMLOListElement> & { children: React.ReactNode }) => (
-                                        <ol className="list-decimal pl-6 my-1.5" {...props}>
+                                        <ol className="list-decimal pl-6 my-4 space-y-1" {...props}>
                                             {children}
                                         </ol>
+                                    ),
+                                    blockquote: ({ children, ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement> & { children: React.ReactNode }) => (
+                                        <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 py-1 my-4 italic text-gray-700 dark:text-gray-300" {...props}>
+                                            {children}
+                                        </blockquote>
+                                    ),
+                                    hr: ({ ...props }: React.HTMLAttributes<HTMLHRElement>) => (
+                                        <hr className="my-6 border-gray-200 dark:border-gray-700" {...props} />
+                                    ),
+                                    pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement> & { children: React.ReactNode }) => (
+                                        <pre className="my-4 overflow-x-auto rounded-lg bg-gray-900 dark:bg-gray-950 p-4 shadow-md" {...props}>
+                                            {children}
+                                        </pre>
+                                    ),
+                                    strong: ({ children, ...props }: React.HTMLAttributes<HTMLElement> & { children: React.ReactNode }) => (
+                                        <strong className="font-semibold text-gray-900 dark:text-gray-100" {...props}>
+                                            {children}
+                                        </strong>
+                                    ),
+                                    em: ({ children, ...props }: React.HTMLAttributes<HTMLElement> & { children: React.ReactNode }) => (
+                                        <em className="italic" {...props}>
+                                            {children}
+                                        </em>
                                     )
                                 }}
                             >
@@ -596,9 +512,9 @@ const MessageItem: FC<MessageItemProps> = ({ message }) => {
 
                 {message.references && (
                     <motion.div
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={isNewMessage.current ? { opacity: 0, y: 10 } : { opacity: 1, y: 0 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
+                        transition={isNewMessage.current ? { delay: 0.3 } : { duration: 0 }}
                         className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 overflow-hidden"
                     >
                         <details className="overflow-hidden details-reset">
@@ -738,4 +654,4 @@ const AithenaIcon: FC = () => (
     </svg>
 );
 
-export default MessageItem; 
+export default MessageItem;
