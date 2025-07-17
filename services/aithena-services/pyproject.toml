@@ -1,6 +1,6 @@
 [project]
 name = "aithena-services"
-version = "version = "version = "1.1.1"""
+version = "1.1.1"
 description = "Services to interact with pgvector database"
 authors = [{ name = "Camilo Velez", email = "camilo.velez@axleinfo.com"}, {nam="Antoine Gerardin", email = "antoine.gerardin@nextonicsolutions.com" }]
 requires-python = ">=3.11,<3.12"
