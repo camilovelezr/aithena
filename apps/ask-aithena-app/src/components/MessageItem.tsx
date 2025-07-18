@@ -275,6 +275,12 @@ const MessageItem: FC<MessageItemProps> = ({
                         <div
                             ref={messageContentRef}
                             className={`${isUser ? 'text-gray-900 dark:text-white text-right' : 'text-gray-800 dark:text-gray-100'}`}
+                            onMouseLeave={() => {
+                                // Ensure tooltip is hidden when mouse leaves the message area
+                                if (onHideTooltip) {
+                                    onHideTooltip();
+                                }
+                            }}
                         >
                             <ReactMarkdown
                                 rehypePlugins={[rehypeHighlight, rehypeKatex]}
@@ -282,22 +288,64 @@ const MessageItem: FC<MessageItemProps> = ({
                                 className={`prose dark:prose-invert max-w-none text-base break-words ${isUser ? '!text-gray-900 dark:!text-white prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-code:text-gray-900 dark:prose-code:text-white' : ''} markdown-content`}
                                 components={{
                                     h1: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>{children}</h1>
+                                        <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h1>
                                     ),
                                     h2: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h2 className="text-2xl font-semibold mt-6 mb-3 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>{children}</h2>
+                                        <h2 className="text-2xl font-semibold mt-6 mb-3 text-gray-900 dark:text-gray-100 leading-tight tracking-tight" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h2>
                                     ),
                                     h3: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h3 className="text-xl font-semibold mt-5 mb-2.5 text-gray-900 dark:text-gray-100 leading-snug" {...props}>{children}</h3>
+                                        <h3 className="text-xl font-semibold mt-5 mb-2.5 text-gray-900 dark:text-gray-100 leading-snug" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h3>
                                     ),
                                     h4: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h4 className="text-lg font-medium mt-4 mb-2 text-gray-900 dark:text-gray-100 leading-snug" {...props}>{children}</h4>
+                                        <h4 className="text-lg font-medium mt-4 mb-2 text-gray-900 dark:text-gray-100 leading-snug" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h4>
                                     ),
                                     h5: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h5 className="text-base font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100" {...props}>{children}</h5>
+                                        <h5 className="text-base font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h5>
                                     ),
                                     h6: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement> & { children: React.ReactNode }) => (
-                                        <h6 className="text-sm font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100 uppercase tracking-wide" {...props}>{children}</h6>
+                                        <h6 className="text-sm font-medium mt-3 mb-2 text-gray-900 dark:text-gray-100 uppercase tracking-wide" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </h6>
                                     ),
                                     p: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement> & { children: React.ReactNode }) => (
                                         <p className="mt-0 mb-4 last:mb-0 leading-relaxed text-gray-800 dark:text-gray-200" {...props}>
@@ -344,6 +392,26 @@ const MessageItem: FC<MessageItemProps> = ({
                                             </table>
                                         </div>
                                     ),
+                                    td: ({ children, ...props }: React.TdHTMLAttributes<HTMLTableCellElement> & { children: React.ReactNode }) => (
+                                        <td className="px-4 py-2 text-gray-800 dark:text-gray-200" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </td>
+                                    ),
+                                    th: ({ children, ...props }: React.ThHTMLAttributes<HTMLTableCellElement> & { children: React.ReactNode }) => (
+                                        <th className="px-4 py-2 font-medium text-gray-900 dark:text-gray-100" {...props}>
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
+                                        </th>
+                                    ),
                                     a: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children: React.ReactNode; href?: string }) => (
                                         <a
                                             href={href}
@@ -357,7 +425,14 @@ const MessageItem: FC<MessageItemProps> = ({
                                     ),
                                     li: ({ children, ...props }: React.LiHTMLAttributes<HTMLLIElement> & { children: React.ReactNode }) => (
                                         <li className="my-1 pl-1 marker:text-gray-500 dark:marker:text-gray-400" {...props}>
-                                            <span className="block leading-relaxed">{children}</span>
+                                            <span className="block leading-relaxed">
+                                                {React.Children.map(children, (child) => {
+                                                    if (typeof child === 'string') {
+                                                        return renderTextWithCitations(child);
+                                                    }
+                                                    return child;
+                                                })}
+                                            </span>
                                         </li>
                                     ),
                                     ul: ({ children, ...props }: React.HTMLAttributes<HTMLUListElement> & { children: React.ReactNode }) => (
@@ -372,7 +447,12 @@ const MessageItem: FC<MessageItemProps> = ({
                                     ),
                                     blockquote: ({ children, ...props }: React.BlockquoteHTMLAttributes<HTMLQuoteElement> & { children: React.ReactNode }) => (
                                         <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 py-1 my-4 italic text-gray-700 dark:text-gray-300" {...props}>
-                                            {children}
+                                            {React.Children.map(children, (child) => {
+                                                if (typeof child === 'string') {
+                                                    return renderTextWithCitations(child);
+                                                }
+                                                return child;
+                                            })}
                                         </blockquote>
                                     ),
                                     hr: ({ ...props }: React.HTMLAttributes<HTMLHRElement>) => (

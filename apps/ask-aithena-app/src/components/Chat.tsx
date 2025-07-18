@@ -98,7 +98,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
         // Add a small delay before hiding to prevent flickering
         hideTooltipTimeout.current = setTimeout(() => {
             setGlobalTooltip(null);
-        }, 100);
+        }, 50); // Reduced delay for more responsive hiding
     };
     
     const hideTooltipImmediately = () => {
