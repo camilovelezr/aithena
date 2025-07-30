@@ -1,7 +1,7 @@
 # Aithena Services
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0--dev0-blue" alt="Version 1.1.1">
+  <img src="https://img.shields.io/badge/version-1.0.0--dev0-blue" alt="Version 1.1.2">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT">
 </p>
 
