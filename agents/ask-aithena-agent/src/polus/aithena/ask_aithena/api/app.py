@@ -17,9 +17,11 @@ from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
     USE_LOGFIRE,
     RABBITMQ_URL,
+    HTTPX_TIMEOUT,
 )
 from polus.aithena.ask_aithena.agents.context_retriever import retrieve_context
-from polus.aithena.ask_aithena.agents.responder import responder_agent
+from polus.aithena.ask_aithena.agents.responder import responder_agent, PROMPT as RESPONDER_PROMPT
+from polus.aithena.ask_aithena.agents.semantic_extractor import run_semantic_agent
 from polus.aithena.ask_aithena.agents.talker import talker_agent
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.agents.reranker.one_step_reranker import rerank_context
@@ -145,6 +147,9 @@ app = create_application()
 class AskRequest(BaseModel):
     query: str
     similarity_n: int = Field(default=SIMILARITY_N)
+    languages: list[str] | None = Field(default=["en"], description="The languages of the documents to retrieve. If not provided, all languages will be retrieved.")
+    start_year: int | None = Field(default=None, description="The start year for filtering works.")
+    end_year: int | None = Field(default=None, description="The end year for filtering works.")
 
 
 class TalkerRequest(BaseModel):
@@ -179,7 +184,13 @@ async def owl_ask(
     session_id = f"session.{x_session_id}"
 
     context_ = await retrieve_context(
-        request.query, request.similarity_n, rabbit_router.broker, session_id
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+        rabbit_router.broker,
+        session_id,
     )
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context retrieved", context=context_.model_dump())
@@ -226,7 +237,13 @@ async def shield_ask(
     session_id = f"session.{x_session_id}"
     # Semantic Analysis and Context Retrieval
     context_norank = await retrieve_context(
-        request.query, request.similarity_n, rabbit_router.broker, session_id
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+        rabbit_router.broker,
+        session_id,
     )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
@@ -292,7 +309,13 @@ async def aegis_ask(
     session_id = f"session.{x_session_id}"
     # Semantic Analysis and Context Retrieval
     context_norank = await retrieve_context(
-        request.query, request.similarity_n, rabbit_router.broker, session_id
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+        rabbit_router.broker,
+        session_id,
     )
     logger.info(f"Context: {context_norank.model_dump_json()}")
     logfire.info("Context retrieved", context=context_norank.model_dump())
@@ -367,3 +390,103 @@ async def talker_talk(
     return StreamingResponse(
         run_talker(context), media_type="text/event-stream"
     )
+
+@app.post("/get-articles")
+async def get_articles(
+    request: AskRequest,
+) -> list[dict]:
+    """Get articles from the Ask Aithena API from similarity search."""
+    logger.info(f"Received get articles request: {request.query}")
+    logfire.info("Received get articles request", query=request.query)
+    context_ = await retrieve_context(
+        query=request.query,
+        similarity_n=request.similarity_n,
+        languages=request.languages,
+        start_year=request.start_year,
+        end_year=request.end_year,
+    )
+    return context_.to_list_for_mcp()
+
+class GetArticleByDoiRequest(BaseModel):
+    doi: str
+
+@app.post("/get-article-by-doi")
+async def get_article_by_doi(
+    request: GetArticleByDoiRequest,
+):
+    """Get an article by its DOI."""
+    logger.info(f"Received get article by DOI request: {request.doi}")
+    logfire.info("Received get article by DOI request", doi=request.doi)
+    try:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+            logfire.instrument_httpx(client)
+            payload = {
+                "doi": request.doi,
+            }
+            response = await client.post(
+                f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/get_article_by_doi",
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        logger.error(f"Error getting article by DOI: {e}")
+        logfire.error(f"Error getting article by DOI: {e}")
+        raise e
+
+class GetSemanticQueryRequest(BaseModel):
+    query: str
+
+@app.post("/get-semantic-query")
+async def get_semantic_query(
+    request: GetSemanticQueryRequest,
+):
+    """Get a semantic query from the Ask Aithena API."""
+    logger.info(f"Received get semantic query request: {request.query}")
+    logfire.info("Received get semantic query request", query=request.query)
+    res = await run_semantic_agent(request.query)
+    return res.output.sentence
+
+
+@app.post("/answer-owl")
+async def answer_owl(
+    request: AskRequest,
+):
+    """Answer a question using the Owl level."""
+    logger.info(f"Received answer owl request: {request.query}")
+    logfire.info("Received answer owl request", query=request.query)
+    context_ = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    response = await responder_agent.run(
+        f"""
+        <question>{request.query}</question>
+        {context_.to_llm_context()}
+        """
+    )
+
+    return response
+
+@app.post("/prompt-answer-owl")
+async def prompt_answer_owl(
+    request: AskRequest,
+):
+    """Prompt the Ask Aithena API to answer a question."""
+    logger.info(f"Received prompt answer owl request: {request.query}")
+    logfire.info("Received prompt answer owl request", query=request.query)
+    context_ = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    prompt_ = [RESPONDER_PROMPT,
+               f"\n\nHere is the question:\n<question>{request.query}</question>\nAnd here is the context:\n{context_.to_llm_context()}"]
+    prompt_ = "\n".join(prompt_)
+
+    return prompt_

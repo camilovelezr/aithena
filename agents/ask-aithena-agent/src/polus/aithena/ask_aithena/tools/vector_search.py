@@ -41,8 +41,11 @@ async def _embed_text(text: str) -> list[float]:
 async def get_similar_works_async(
     text: str,
     similarity_n: int,
+    languages: list[str] | None,
     broker: Optional[RabbitBroker] = None,
     session_id: Optional[str] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
 ) -> list[dict]:
     """Asynchronously get similar works from the database."""
     emb = await _embed_text(text)
@@ -59,9 +62,17 @@ async def get_similar_works_async(
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             logfire.instrument_httpx(client)
+            payload = {
+                "vector": emb,
+                "n": similarity_n,
+                "table_name": EMBEDDING_TABLE,
+                "languages": languages,
+                "start_year": start_year,
+                "end_year": end_year,
+            }
             response = await client.post(
                 f"{LITELLM_URL.rstrip('v1/')}/memory/pgvector/search_works",
-                json={"vector": emb, "n": similarity_n, "table_name": EMBEDDING_TABLE},
+                json=payload,
             )
             response.raise_for_status()
             return response.json()

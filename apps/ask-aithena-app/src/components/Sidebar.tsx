@@ -81,11 +81,11 @@ const DebugSection: React.FC<DebugSectionProps> = ({ title, children, defaultOpe
                 <span className="font-medium text-gray-900 dark:text-white">{title}</span>
                 <motion.div
                     initial={false}
-                    animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.2, ease: [0.4, 0.0, 0.2, 1] }}
-                >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
+                animate={{ rotate: isOpen ? 180 : 0 }}
+                transition={{ duration: 0.1, ease: 'linear' }}
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
                         width="16"
                         height="16"
                         viewBox="0 0 24 24"
@@ -107,8 +107,8 @@ const DebugSection: React.FC<DebugSectionProps> = ({ title, children, defaultOpe
                     opacity: isOpen ? 1 : 0
                 }}
                 transition={{
-                    duration: 0.3,
-                    ease: [0.4, 0.0, 0.2, 1]
+                    duration: 0.15,
+                    ease: 'linear'
                 }}
                 className="overflow-hidden"
             >
@@ -151,12 +151,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
     // State for similarity_n input
     const [similarityN, setSimilarityN] = useState(settings.similarity_n);
+    const [language, setLanguage] = useState(settings.language);
+    const [startYear, setStartYear] = useState(settings.start_year);
+    const [endYear, setEndYear] = useState(settings.end_year);
 
     // Client-side rendering only
     useEffect(() => {
         setMounted(true);
         setSimilarityN(settings.similarity_n);
-    }, [settings.similarity_n]);
+        setLanguage(settings.language);
+        setStartYear(settings.start_year);
+        setEndYear(settings.end_year);
+    }, [settings.similarity_n, settings.language, settings.start_year, settings.end_year]);
 
     // Handle tooltip display with delay to prevent flickering
     const handleTooltipMouseEnter = () => {
@@ -196,6 +202,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     // Update global setting when user confirms
     const saveSimilarityN = () => {
         updateSettings({ similarity_n: similarityN });
+    };
+
+    const handleLanguageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setLanguage(e.target.value);
+    };
+
+    const handleStartYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseInt(e.target.value, 10);
+        setStartYear(isNaN(value) ? null : value);
+    };
+
+    const handleEndYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseInt(e.target.value, 10);
+        setEndYear(isNaN(value) ? null : value);
+    };
+
+    const saveFilters = () => {
+        updateSettings({
+            language,
+            start_year: startYear,
+            end_year: endYear,
+        });
     };
 
     // Check connection status when sidebar opens
@@ -254,7 +282,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 className="fixed left-0 top-0 h-full w-80 bg-white dark:bg-[#1a2234] border-r border-gray-200/50 dark:border-gray-800/50 z-50 overflow-hidden"
                 initial={{ x: '-100%' }}
                 animate={{ x: isOpen ? 0 : '-100%' }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 50 }}
             >
                 <div className="h-full flex flex-col">
                     <div className="py-3 border-b border-gray-200/50 dark:border-gray-800/50">
@@ -347,6 +375,58 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                                         Number of source documents used to answer your questions (default: 10)
                                     </p>
                                 </div>
+                                <DebugSection title="Filters" parentRef={preferencesRef}>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label htmlFor="language" className="text-gray-700 dark:text-gray-300 font-medium">
+                                                Language
+                                            </label>
+                                            <input
+                                                id="language"
+                                                type="text"
+                                                value={language}
+                                                onChange={handleLanguageChange}
+                                                onBlur={saveFilters}
+                                                className="w-full px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252f44] text-gray-900 dark:text-white focus:border-primary-500 dark:focus:border-primary-400 focus:ring focus:ring-primary-500/20 dark:focus:ring-primary-400/20 outline-none"
+                                            />
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Filter by language (e.g., 'en' or 'english'). Separate multiple languages with commas.
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="start_year" className="text-gray-700 dark:text-gray-300 font-medium">
+                                                Start Year
+                                            </label>
+                                            <input
+                                                id="start_year"
+                                                type="number"
+                                                value={startYear ?? ''}
+                                                onChange={handleStartYearChange}
+                                                onBlur={saveFilters}
+                                                className="w-full px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252f44] text-gray-900 dark:text-white focus:border-primary-500 dark:focus:border-primary-400 focus:ring focus:ring-primary-500/20 dark:focus:ring-primary-400/20 outline-none"
+                                            />
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Filter results published after this year
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label htmlFor="end_year" className="text-gray-700 dark:text-gray-300 font-medium">
+                                                End Year
+                                            </label>
+                                            <input
+                                                id="end_year"
+                                                type="number"
+                                                value={endYear ?? ''}
+                                                onChange={handleEndYearChange}
+                                                onBlur={saveFilters}
+                                                className="w-full px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252f44] text-gray-900 dark:text-white focus:border-primary-500 dark:focus:border-primary-400 focus:ring focus:ring-primary-500/20 dark:focus:ring-primary-400/20 outline-none"
+                                            />
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Filter results published before this year
+                                            </p>
+                                        </div>
+                                    </div>
+                                </DebugSection>
                             </div>
                         </DebugSection>
                         
@@ -555,4 +635,4 @@ const Tooltip = ({
     );
 };
 
-export default Sidebar; 
+export default Sidebar;

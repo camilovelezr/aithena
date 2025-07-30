@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
-import json
+import orjson
 
 
 class Document(BaseModel):
@@ -19,6 +19,7 @@ class Document(BaseModel):
         ..., description="The authors of the document, can be empty list if unknown"
     )
     title: str = Field(..., description="The title of the document")
+    similarity_score: float = Field(..., description="The similarity score of the document from PGVector")
 
     def to_context(self, n: int, reason: Optional[str] = None) -> str:
         """Convert document to context string format."""
@@ -30,16 +31,27 @@ class Document(BaseModel):
         context_string += "</doc>\n"
         return context_string
 
-    def to_reference(self, score: Optional[float] = None) -> Dict[str, Any]:
+    def to_reference(self, score: Optional[float] = None, include_abstract: bool = False) -> Dict[str, Any]:
         """Convert document to reference dictionary format for frontend rendering."""
-        return {
-            "title": self.title,
-            "authors": self.authors,
-            "year": self.year,
-            "doi": self.doi,
-            "id": self.id,
-            "score": score if score is not None else None,
-        }
+        if include_abstract:
+            return {
+                "title": self.title,
+                "authors": self.authors,
+                "year": self.year,
+                "doi": self.doi,
+                "id": self.id,
+                "score": score if score is not None else self.similarity_score,
+                "abstract": self.content,
+            }
+        else:
+            return {
+                "title": self.title,
+                "authors": self.authors,
+                "year": self.year,
+                "doi": self.doi,
+                "id": self.id,
+                "score": score if score is not None else self.similarity_score,
+            }
 
     @classmethod
     def from_work(cls, work: dict) -> "Document":
@@ -60,6 +72,7 @@ class Document(BaseModel):
             doi=work["doi"] or "",
             authors=authors_,
             title=work["title"],
+            similarity_score=work["similarity_score"],
         )
 
     # sometimes, the title is None, so we need to validate it
@@ -118,7 +131,26 @@ class Context(BaseModel):
             references.append(ref_data)
 
         # Return a JSON string that the frontend can parse
-        return json.dumps(references)
+        return orjson.dumps(references).decode("utf-8")
+    
+    def to_list_for_mcp(self) -> list[dict]:
+        """Convert context to a list of dictionaries with abstracts for MCP."""
+        references = []
+        for i, doc in enumerate(self._documents()):
+            ref_data = doc.to_reference(
+                score=(
+                    self.reranked_scores[i]
+                    if self.reranked_scores is not None
+                    else None
+                ),
+                include_abstract=True,
+            )
+            # Add the index (1-based) to each reference
+            ref_data["index"] = i + 1
+            references.append(ref_data)
+
+        # Return a JSON string that the frontend can parse
+        return references
 
     def to_works_for_reranker(self) -> str:
         """Convert context to works for reranker string."""

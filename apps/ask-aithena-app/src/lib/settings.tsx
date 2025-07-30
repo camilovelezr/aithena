@@ -1,20 +1,19 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-interface AppSettings {
-    similarity_n: number;
-    // Add more global settings here as needed
-}
+import { Settings } from '@/types/settings';
 
 interface SettingsContextType {
-    settings: AppSettings;
-    updateSettings: (newSettings: Partial<AppSettings>) => void;
+    settings: Settings;
+    updateSettings: (newSettings: Partial<Settings>) => void;
 }
 
 // Default settings
-const defaultSettings: AppSettings = {
+const defaultSettings: Settings = {
     similarity_n: 10,
+    language: 'en',
+    start_year: null,
+    end_year: null,
 };
 
 // Create context with default values
@@ -28,7 +27,7 @@ export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // Initialize state from localStorage if available, otherwise use defaults
-    const [settings, setSettings] = useState<AppSettings>(() => {
+    const [settings, setSettings] = useState<Settings>(() => {
         if (typeof window === 'undefined') return defaultSettings;
 
         const savedSettings = localStorage.getItem('app_settings');
@@ -51,7 +50,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, [settings]);
 
     // Function to update settings
-    const updateSettings = (newSettings: Partial<AppSettings>) => {
+    const updateSettings = (newSettings: Partial<Settings>) => {
         setSettings(prevSettings => ({
             ...prevSettings,
             ...newSettings,
@@ -65,4 +64,4 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 };
 
-export default SettingsProvider; 
+export default SettingsProvider;

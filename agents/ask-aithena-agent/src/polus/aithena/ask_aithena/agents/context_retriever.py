@@ -28,6 +28,9 @@ logger = get_logger(__name__)
 async def retrieve_context(
     query: str,
     similarity_n: int,
+    languages: list[str] | None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
     broker: Optional[RabbitBroker] = None,
     session_id: Optional[str] = None,
 ) -> Context:
@@ -36,6 +39,35 @@ async def retrieve_context(
             logger.info(f"Running context retriever with query: {query}")
             logger.info("Running semantic extractor")
             semantics = await run_semantic_agent(query, broker, session_id)
+            if broker is not None:
+                await broker.publish(
+                    ProcessingStatus(
+                        status="searching_for_works",
+                        message=f"Now I will search for works related to {semantics.output.sentence.lower()}...",
+                    ).model_dump_json(),
+                    exchange=ask_aithena_exchange,
+                    queue=ask_aithena_queue,
+                    routing_key=session_id,
+                )
+                logger.info("Running vector search")
+            logger.info(f"Start year: {start_year}, End year: {end_year}, Languages: {languages}")
+            works = await get_similar_works_async(
+                semantics.output.sentence,
+                similarity_n,
+                languages,
+                broker,
+                session_id,
+                start_year,
+                end_year,
+            )
+            logger.info("Creating context")
+            context = Context.from_works(works)
+            return context
+    else:
+        logger.info(f"Running context retriever with query: {query}")
+        logger.info("Running semantic extractor")
+        semantics = await run_semantic_agent(query, broker, session_id)
+        if broker is not None:
             await broker.publish(
                 ProcessingStatus(
                     status="searching_for_works",
@@ -45,29 +77,16 @@ async def retrieve_context(
                 queue=ask_aithena_queue,
                 routing_key=session_id,
             )
-            logger.info("Running vector search")
-            works = await get_similar_works_async(
-                semantics.output.sentence, similarity_n, broker, session_id
-            )
-            logger.info("Creating context")
-            context = Context.from_works(works)
-            return context
-    else:
-        logger.info(f"Running context retriever with query: {query}")
-        logger.info("Running semantic extractor")
-        semantics = await run_semantic_agent(query, broker, session_id)
-        await broker.publish(
-            ProcessingStatus(
-                status="searching_for_works",
-                message=f"Now I will search for works related to {semantics.output.sentence.lower()}...",
-            ).model_dump_json(),
-            exchange=ask_aithena_exchange,
-            queue=ask_aithena_queue,
-            routing_key=session_id,
-        )
         logger.info("Running vector search")
+        logger.info(f"Start year: {start_year}, End year: {end_year}, Languages: {languages}")
         works = await get_similar_works_async(
-            semantics.output.sentence, similarity_n, broker, session_id
+            semantics.output.sentence,
+            similarity_n,
+            languages,
+            broker,
+            session_id,
+            start_year,
+            end_year,
         )
         logger.info("Creating context")
         context = Context.from_works(works)
