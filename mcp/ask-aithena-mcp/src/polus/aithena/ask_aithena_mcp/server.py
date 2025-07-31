@@ -517,4 +517,4 @@ async def answer_aegis(
         return response.json()
 
 if __name__ == "__main__":
-    mcp.run(transport="http", port=3283)
+    mcp.run(transport="http", port=3283, host="0.0.0.0")
