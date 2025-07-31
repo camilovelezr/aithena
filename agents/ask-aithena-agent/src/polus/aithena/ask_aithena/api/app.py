@@ -469,15 +469,15 @@ async def answer_owl(
         """
     )
 
-    return response
+    return f"Answer: {response.output}.\n\n References: {context_.to_references()}"
 
-@app.post("/prompt-answer-owl")
-async def prompt_answer_owl(
+@app.post("/prompt-owl")
+async def prompt_owl(
     request: AskRequest,
 ):
-    """Prompt the Ask Aithena API to answer a question."""
-    logger.info(f"Received prompt answer owl request: {request.query}")
-    logfire.info("Received prompt answer owl request", query=request.query)
+    """Generate a prompt to answer a question using the Owl level."""
+    logger.info(f"Received prompt owl request: {request.query}")
+    logfire.info("Received prompt owl request", query=request.query)
     context_ = await retrieve_context(
         request.query,
         request.similarity_n,
@@ -485,6 +485,97 @@ async def prompt_answer_owl(
         request.start_year,
         request.end_year,
     )
+    prompt_ = [RESPONDER_PROMPT,
+               f"\n\nHere is the question:\n<question>{request.query}</question>\nAnd here is the context:\n{context_.to_llm_context()}"]
+    prompt_ = "\n".join(prompt_)
+
+    return prompt_
+
+
+@app.post("/answer-shield")
+async def answer_shield(
+    request: AskRequest,
+):
+    """Answer a question using the Shield level."""
+    logger.info(f"Received answer shield request: {request.query}")
+    logfire.info("Received answer shield request", query=request.query)
+    context_norank = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    context_ = await rerank_context(request.query, context_norank)
+    response = await responder_agent.run(
+        f"""
+        <question>{request.query}</question>
+        {context_.to_llm_context()}
+        """
+    )
+
+    return f"Answer: {response.output}.\n\n References: {context_.to_references()}"
+
+@app.post("/prompt-shield")
+async def prompt_shield(
+    request: AskRequest,
+):
+    """Generate a prompt to answer a question using the Shield level."""
+    logger.info(f"Received prompt shield request: {request.query}")
+    logfire.info("Received prompt shield request", query=request.query)
+    context_ = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    context_ = await rerank_context(request.query, context_)
+    prompt_ = [RESPONDER_PROMPT,
+               f"\n\nHere is the question:\n<question>{request.query}</question>\nAnd here is the context:\n{context_.to_llm_context()}"]
+    prompt_ = "\n".join(prompt_)
+
+    return prompt_
+
+@app.post("/answer-aegis")
+async def answer_aegis(
+    request: AskRequest,
+):
+    """Answer a question using the Aegis level."""
+    logger.info(f"Received answer aegis request: {request.query}")
+    logfire.info("Received answer aegis request", query=request.query)
+    context_norank = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    context_ = await aegis_rerank_context(request.query, context_norank)
+    response = await responder_agent.run(
+        f"""
+        <question>{request.query}</question>
+        {context_.to_llm_context()}
+        """
+    )
+
+    return f"Answer: {response.output}.\n\n References: {context_.to_references()}"
+
+@app.post("/prompt-aegis")
+async def prompt_aegis(
+    request: AskRequest,
+):
+    """Generate a prompt to answer a question using the Aegis level."""
+    logger.info(f"Received prompt aegis request: {request.query}")
+    logfire.info("Received prompt aegis request", query=request.query)
+    context_ = await retrieve_context(
+        request.query,
+        request.similarity_n,
+        request.languages,
+        request.start_year,
+        request.end_year,
+    )
+    context_ = await aegis_rerank_context(request.query, context_)
     prompt_ = [RESPONDER_PROMPT,
                f"\n\nHere is the question:\n<question>{request.query}</question>\nAnd here is the context:\n{context_.to_llm_context()}"]
     prompt_ = "\n".join(prompt_)

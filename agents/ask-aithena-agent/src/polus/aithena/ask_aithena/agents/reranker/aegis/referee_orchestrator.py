@@ -122,6 +122,10 @@ async def publish_status(ctx: RunContext[AegisRerankerDeps], summary: str) -> No
     Args:
         summary: the summary of the reranking process, MUST BE IN FIRST PERSON
     """
+    if ctx.deps.broker is None:
+        logger.info(f"No broker in Aegis, message: {summary}")
+        logfire.info(f"No broker in Aegis, message: {summary}")
+        return
     await ctx.deps.broker.publish(
         ProcessingStatus(
             status="reranking_context",
