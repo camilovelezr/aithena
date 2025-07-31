@@ -15,14 +15,30 @@ export interface ApiHealthStatus {
 }
 
 // Function to ask the AI based on the selected mode
-export async function askQuestion(query: string, mode: AIMode, sessionId: string, similarity_n: number): Promise<Response> {
+export async function askQuestion(
+    query: string, 
+    mode: AIMode, 
+    sessionId: string, 
+    similarity_n: number,
+    languages: string[],
+    start_year: number | null,
+    end_year: number | null
+): Promise<Response> {
     try {
         const response = await fetch('/api/ask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ query, mode, sessionId, similarity_n }),
+            body: JSON.stringify({ 
+                query, 
+                mode, 
+                sessionId, 
+                similarity_n,
+                languages,
+                start_year,
+                end_year
+            }),
         });
 
         if (!response.ok) {

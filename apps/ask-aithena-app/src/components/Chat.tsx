@@ -223,7 +223,15 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                 response = await continueConversation(history, sessionIdRef.current);
             } else {
                 // First question - use the original endpoint with selected mode
-                response = await askQuestion(currentQuery, mode, sessionIdRef.current, settings.similarity_n);
+                response = await askQuestion(
+                    currentQuery, 
+                    mode, 
+                    sessionIdRef.current, 
+                    settings.similarity_n,
+                    settings.languages,
+                    settings.start_year,
+                    settings.end_year
+                );
             }
 
             // Use parseStreamingResponse to handle the stream

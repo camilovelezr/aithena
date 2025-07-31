@@ -11,7 +11,7 @@ interface SettingsContextType {
 // Default settings
 const defaultSettings: Settings = {
     similarity_n: 10,
-    language: 'en',
+    languages: ['en'],
     start_year: null,
     end_year: null,
 };

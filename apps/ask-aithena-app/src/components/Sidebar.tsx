@@ -151,7 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
     // State for similarity_n input
     const [similarityN, setSimilarityN] = useState(settings.similarity_n);
-    const [language, setLanguage] = useState(settings.language);
+    const [languages, setLanguages] = useState(settings.languages.join(', '));
     const [startYear, setStartYear] = useState(settings.start_year);
     const [endYear, setEndYear] = useState(settings.end_year);
 
@@ -159,10 +159,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     useEffect(() => {
         setMounted(true);
         setSimilarityN(settings.similarity_n);
-        setLanguage(settings.language);
+        setLanguages(settings.languages.join(', '));
         setStartYear(settings.start_year);
         setEndYear(settings.end_year);
-    }, [settings.similarity_n, settings.language, settings.start_year, settings.end_year]);
+    }, [settings.similarity_n, settings.languages, settings.start_year, settings.end_year]);
 
     // Handle tooltip display with delay to prevent flickering
     const handleTooltipMouseEnter = () => {
@@ -205,7 +205,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     };
 
     const handleLanguageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setLanguage(e.target.value);
+        setLanguages(e.target.value);
     };
 
     const handleStartYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,8 +219,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     };
 
     const saveFilters = () => {
+        // Convert comma-separated string to array of languages
+        const languagesArray = languages
+            .split(',')
+            .map(lang => lang.trim())
+            .filter(lang => lang.length > 0);
+        
         updateSettings({
-            language,
+            languages: languagesArray,
             start_year: startYear,
             end_year: endYear,
         });
@@ -384,7 +390,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                                             <input
                                                 id="language"
                                                 type="text"
-                                                value={language}
+                                                value={languages}
                                                 onChange={handleLanguageChange}
                                                 onBlur={saveFilters}
                                                 className="w-full px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#252f44] text-gray-900 dark:text-white focus:border-primary-500 dark:focus:border-primary-400 focus:ring focus:ring-primary-500/20 dark:focus:ring-primary-400/20 outline-none"
