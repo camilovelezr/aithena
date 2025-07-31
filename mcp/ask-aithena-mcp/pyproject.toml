@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Ask AIthena MCP"
 readme = "README.md"
 authors = [
-    { name = "Camilo Velez", email = "camilov61@gmail.com" }
+    { name = "Camilo Velez", email = "camilo.velezramirez@nih.gov" }
 ]
 requires-python = ">=3.12"
 dependencies = [
