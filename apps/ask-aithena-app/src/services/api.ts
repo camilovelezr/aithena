@@ -3,6 +3,10 @@
 import { AIMode } from '@/lib/types';
 import { useState, useEffect } from 'react';
 import { useSettings } from '@/lib/settings';
+import SecureLogger from '@/lib/logger';
+
+// Create a client-side logger instance
+const apiLogger = new SecureLogger('API-Client');
 
 // API Health Status Interface
 export interface ApiHealthStatus {
@@ -46,10 +50,10 @@ export async function askQuestion(
         }
 
         return response;
-    } catch (error) {
-        console.error('Error asking question:', error);
-        throw error;
-    }
+        } catch (error) {
+            apiLogger.error('Error asking question', error);
+            throw error;
+        }
 }
 
 // Function to continue conversation using the talker agent
@@ -68,10 +72,10 @@ export async function continueConversation(history: Array<{role: string, content
         }
 
         return response;
-    } catch (error) {
-        console.error('Error continuing conversation:', error);
-        throw error;
-    }
+        } catch (error) {
+            apiLogger.error('Error continuing conversation', error);
+            throw error;
+        }
 }
 
 // Parse streaming response
@@ -104,13 +108,13 @@ export async function checkApiHealth(): Promise<ApiHealthStatus> {
             return { status: 'error', statusCode: response.status };
         }
         return await response.json();
-    } catch (error) {
-        console.error('API health check failed:', error);
-        return {
-            status: 'error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        };
-    }
+        } catch (error) {
+            apiLogger.error('API health check failed', error);
+            return {
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
 }
 
 // Hook for API health status

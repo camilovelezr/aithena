@@ -10,6 +10,10 @@ import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
 import { generateSessionId } from '@/lib/utils';
+import SecureLogger from '@/lib/logger';
+
+// Create a client-side logger instance
+const chatLogger = new SecureLogger('Chat');
 
 interface ChatProps {
     mode: AIMode;
@@ -157,7 +161,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
 
     // Initialize session ID only once when component mounts
     useEffect(() => {
-        console.log('Initializing session ID once:', sessionIdRef.current);
+        chatLogger.debug('Initializing session ID');
         setSessionId(sessionIdRef.current);
     }, []); // Empty dependency array = run once on mount
 
@@ -291,7 +295,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             }
 
         } catch (err) {
-            console.error('Error:', err);
+            chatLogger.error('Error during message processing', err);
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
             setLoading(false);

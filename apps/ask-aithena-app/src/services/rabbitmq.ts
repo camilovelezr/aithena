@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { StatusUpdate } from '@/lib/types';
 import { Client, Frame, Message, StompHeaders } from '@stomp/stompjs';
+import SecureLogger from '@/lib/logger';
+
+// Create a client-side logger instance
+const wsLogger = new SecureLogger('WebSocket-Client');
 
 // Constants for RabbitMQ configuration
 const DEFAULT_EXCHANGE = 'ask-aithena-exchange';
@@ -22,7 +26,7 @@ async function getRabbitMQConfig(): Promise<RabbitMQConfig> {
         }
         return await response.json();
     } catch (error) {
-        console.error('Error fetching RabbitMQ config:', error);
+        wsLogger.error('Error fetching RabbitMQ config', error);
         // Use default values
         return {
             wsUrl: DEFAULT_WS_URL,
@@ -59,7 +63,7 @@ class RabbitMQService {
     }
 
     setSessionId(sessionId: string) {
-        console.log('Setting session ID:', sessionId);
+        wsLogger.debug('Setting session ID', { sessionId: '[REDACTED]' });
         this.sessionId = sessionId;
         // If already connected, resubscribe with new session ID
         if (this.connected && this.client?.connected) {
@@ -73,16 +77,16 @@ class RabbitMQService {
 
     async connect(): Promise<void> {
         if (this.connected && this.client?.connected) {
-            console.log('Already connected to RabbitMQ');
+            wsLogger.debug('Already connected to RabbitMQ');
             return;
         }
 
         // Get configuration from server
         try {
             this.config = await getRabbitMQConfig();
-            console.log('Got RabbitMQ config:', this.config);
+            wsLogger.debug('Got RabbitMQ config', { exchange: this.config.exchange });
         } catch (error) {
-            console.error('Failed to get RabbitMQ config:', error);
+            wsLogger.error('Failed to get RabbitMQ config', error);
             // Use defaults
             this.config = {
                 wsUrl: DEFAULT_WS_URL,
@@ -97,7 +101,7 @@ class RabbitMQService {
             // Construct the WebSocket URL
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}${this.config.wsUrl}`;
-            console.log('Connecting to STOMP WebSocket at:', wsUrl);
+            wsLogger.debug('Connecting to STOMP WebSocket', { protocol });
 
             // Create a new STOMP client
             this.client = new Client({
@@ -107,7 +111,10 @@ class RabbitMQService {
                     passcode: 'guest',
                 },
                 debug: function (str: string) {
-                    console.log('STOMP Debug:', str);
+                    // Only log STOMP debug in development
+                    if (process.env.NODE_ENV === 'development') {
+                        wsLogger.debug('STOMP Debug', { message: str.substring(0, 100) });
+                    }
                 },
                 reconnectDelay: 5000,
                 heartbeatIncoming: 4000,
@@ -116,7 +123,7 @@ class RabbitMQService {
 
             // Connection successful
             this.client.onConnect = (frame: Frame) => {
-                console.log('Connected to STOMP broker:', frame);
+                wsLogger.info('Connected to STOMP broker');
                 this.connected = true;
                 this.reconnectAttempts = 0;
                 if (this.connectionChangeCallback) {
@@ -133,14 +140,16 @@ class RabbitMQService {
 
             // Connection error
             this.client.onStompError = (frame: Frame) => {
-                console.error('STOMP Error:', frame.headers, frame.body);
+                wsLogger.error('STOMP Error', undefined, { 
+                    message: frame.headers.message || 'Unknown error' 
+                });
                 this.handleConnectionError(frame);
                 reject(new Error(`STOMP error: ${frame.headers.message}`));
             };
 
             // WebSocket level error
             this.client.onWebSocketError = (event: Event) => {
-                console.error('WebSocket Error:', event);
+                wsLogger.error('WebSocket Error', event);
                 this.handleConnectionError();
             };
 
@@ -148,7 +157,7 @@ class RabbitMQService {
             try {
                 this.client.activate();
             } catch (error) {
-                console.error('Error activating STOMP client:', error);
+                wsLogger.error('Error activating STOMP client', error);
                 this.handleConnectionError();
                 reject(error);
             }
@@ -164,10 +173,13 @@ class RabbitMQService {
         // Attempt to reconnect if within limits
         this.reconnectAttempts++;
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            console.log(`Reconnect attempt ${this.reconnectAttempts} of ${this.maxReconnectAttempts}`);
+            wsLogger.info('Attempting reconnection', { 
+                attempt: this.reconnectAttempts, 
+                maxAttempts: this.maxReconnectAttempts 
+            });
             setTimeout(() => this.connect(), 5000 * this.reconnectAttempts);
         } else {
-            console.error('Max reconnection attempts reached');
+            wsLogger.error('Max reconnection attempts reached');
         }
     }
 
@@ -183,7 +195,7 @@ class RabbitMQService {
             try {
                 this.client.deactivate();
             } catch (e) {
-                console.log('Error deactivating existing client:', e);
+                wsLogger.debug('Error deactivating existing client', e as Error);
             }
         }
 
@@ -200,7 +212,7 @@ class RabbitMQService {
 
     private subscribe(): void {
         if (!this.client || !this.sessionId) {
-            console.error('Cannot subscribe: client not initialized or session ID not set');
+            wsLogger.error('Cannot subscribe: client not initialized or session ID not set');
             return;
         }
 
@@ -209,7 +221,7 @@ class RabbitMQService {
             try {
                 this.subscription.unsubscribe();
             } catch (e) {
-                console.error('Error unsubscribing:', e);
+                wsLogger.error('Error unsubscribing', e);
             }
         }
 
@@ -217,10 +229,10 @@ class RabbitMQService {
         const routingKey = `session.${this.sessionId}`;
         const destination = `/exchange/${this.config.exchange}/${routingKey}`;
 
-        console.log('Subscribing to:', destination);
+        wsLogger.debug('Subscribing to exchange', { exchange: this.config.exchange });
 
         this.subscription = this.client.subscribe(destination, (message: Message) => {
-            console.log('Received message:', message.body);
+            wsLogger.debug('Received message', { length: message.body.length });
             if (this.statusUpdateCallback) {
                 try {
                     // Try to parse as JSON first
@@ -257,14 +269,14 @@ export function useRabbitMQ() {
         // Set up callbacks first
         const statusCallback = (status: StatusUpdate) => {
             if (mounted) {
-                console.log('Received status update:', status);
+                wsLogger.debug('Received status update', { status: status.status });
                 setStatusUpdates((prev: StatusUpdate[]) => [...prev, status]);
             }
         };
 
         const connectionCallback = (isConnected: boolean) => {
             if (mounted) {
-                console.log('Connection status changed:', isConnected);
+                wsLogger.debug('Connection status changed', { connected: isConnected });
                 setConnected(isConnected);
             }
         };
@@ -274,7 +286,7 @@ export function useRabbitMQ() {
 
         // Then connect
         rabbitmqService.connect().catch(error => {
-            console.error('Failed to connect to RabbitMQ:', error);
+            wsLogger.error('Failed to connect to RabbitMQ', error);
         });
 
         return () => {

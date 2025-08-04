@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { request } from 'undici';
 import { API_URL } from '@/lib/server/config';
+import { apiLogger } from '@/lib/logger';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
     try {
-        const { query, mode, sessionId, similarity_n, languages, start_year, end_year } = await request.json();
+        const { query, mode, sessionId, similarity_n, languages, start_year, end_year } = await req.json();
         
-        // Make the request server-side
-        const response = await fetch(`${API_URL}/${mode}/ask`, {
+        // Make the request server-side using undici
+        const { body, statusCode, headers } = await request(`${API_URL}/${mode}/ask`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -18,34 +20,30 @@ export async function POST(request: NextRequest) {
                 languages,
                 start_year,
                 end_year
-            })
+            }),
+            // Timeout configuration
+            bodyTimeout: 0, // No timeout for body streaming
+            headersTimeout: 0, // No timeout for initial response
         });
 
-        if (!response.ok) {
-            throw new Error(`API request failed: ${response.statusText}`);
+        if (statusCode !== 200) {
+            throw new Error(`API request failed with status: ${statusCode}`);
         }
 
         // Create a transform stream to handle the response
         const transformStream = new TransformStream();
         const writer = transformStream.writable.getWriter();
         
-        // Start reading the response body
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('No response body');
-        }
-
         // Process the stream
         (async () => {
             try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    await writer.write(value);
+                for await (const chunk of body) {
+                    await writer.write(chunk);
                 }
+            } catch (error) {
+                apiLogger.error('Error processing stream', error);
             } finally {
                 await writer.close();
-                reader.releaseLock();
             }
         })();
 
@@ -59,7 +57,7 @@ export async function POST(request: NextRequest) {
             }
         });
     } catch (error) {
-        console.error('Error in ask route:', error);
+        apiLogger.error('Error in ask route', error);
         return NextResponse.json(
             { error: 'Failed to process request' },
             { status: 500 }

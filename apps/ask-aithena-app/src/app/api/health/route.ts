@@ -1,16 +1,24 @@
 import { NextResponse } from 'next/server';
+import { request } from 'undici';
 import { API_URL } from '@/lib/server/config';
 
 export async function GET() {
     try {
-        const response = await fetch(`${API_URL}/health`);
-        if (!response.ok) {
+        const { body, statusCode } = await request(`${API_URL}/health`, {
+            method: 'GET',
+            // Health checks should have reasonable timeouts
+            bodyTimeout: 30000, // 30 seconds
+            headersTimeout: 30000, // 30 seconds
+        });
+        
+        if (statusCode !== 200) {
             return NextResponse.json(
-                { status: 'error', statusCode: response.status },
-                { status: response.status }
+                { status: 'error', statusCode },
+                { status: statusCode }
             );
         }
-        const data = await response.json();
+        
+        const data = await body.json();
         return NextResponse.json(data);
     } catch (error) {
         console.error('Health check failed:', error);
@@ -22,4 +30,4 @@ export async function GET() {
             { status: 500 }
         );
     }
-} 
+}

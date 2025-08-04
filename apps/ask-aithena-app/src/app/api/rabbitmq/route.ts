@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RABBITMQ_WS_URL } from '@/lib/server/config';
 import 'server-only';
+import { apiLogger } from '@/lib/logger';
 
 export async function GET() {
     try {
@@ -12,10 +13,10 @@ export async function GET() {
             exchange: 'ask-aithena-exchange'
         });
     } catch (error) {
-        console.error('Failed to get RabbitMQ config:', error);
+        apiLogger.error('Failed to get RabbitMQ config', error);
         return NextResponse.json(
             { error: 'Failed to get RabbitMQ configuration' },
             { status: 500 }
         );
     }
-} 
+}

@@ -4,10 +4,8 @@
 const API_URL = process.env.API_URL || 'http://ask-aithena-agent-service:8000';
 const RABBITMQ_WS_URL = process.env.RABBITMQ_WS_URL || 'ws://rabbitmq-service:15674/ws';
 
-// Log the configuration for debugging
-console.log(`[Next.js Config] Environment: ${process.env.APP_ENV || 'production'}`);
-console.log(`[Next.js Config] API URL: ${API_URL}`);
-console.log(`[Next.js Config] RabbitMQ WS URL: ${RABBITMQ_WS_URL}`);
+// Configuration is loaded from environment variables
+// Logging is handled by the secure logger in the application
 
 const nextConfig = {
     reactStrictMode: true,
