@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MessageItem from './MessageItem';
 import ProcessingStatusCard from './ProcessingStatusCard';
 import { useChatStore } from '@/store/chatStore';
-import { askQuestion, continueConversation, parseStreamingResponse } from '@/services/api';
+import { askQuestion, /* continueConversation, */ parseStreamingResponse } from '@/services/api';
 import { useRabbitMQ } from '@/services/rabbitmq';
 import { AIMode } from '@/lib/types';
 import { useSettings } from '@/lib/settings';
@@ -54,6 +54,9 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
 
         if (!loading) {
             setHideStatusAfterResponding(false);
+            if (textareaRef.current) {
+                textareaRef.current.focus();
+            }
         }
 
         // Calculate accurate line height when component mounts
@@ -211,21 +214,21 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
             
             let response: Response;
             
-            if (hasConversationStarted) {
-                // Build conversation history for talker agent
-                const history = messages
-                    .filter(msg => msg.content.trim() !== '') // Filter out empty messages
-                    .map(msg => ({
-                        role: msg.role,
-                        content: msg.content
-                    }));
-                
-                // Add the current query to history
-                history.push({ role: 'user', content: currentQuery });
-                
-                // Use talker endpoint for follow-up conversations
-                response = await continueConversation(history, sessionIdRef.current);
-            } else {
+            // if (hasConversationStarted) {
+            //     // Build conversation history for talker agent
+            //     const history = messages
+            //         .filter(msg => msg.content.trim() !== '') // Filter out empty messages
+            //         .map(msg => ({
+            //             role: msg.role,
+            //             content: msg.content
+            //         }));
+            //     
+            //     // Add the current query to history
+            //     history.push({ role: 'user', content: currentQuery });
+            //     
+            //     // Use talker endpoint for follow-up conversations
+            //     response = await continueConversation(history, sessionIdRef.current);
+            // } else {
                 // First question - use the original endpoint with selected mode
                 response = await askQuestion(
                     currentQuery, 
@@ -236,7 +239,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     settings.start_year,
                     settings.end_year
                 );
-            }
+            // }
 
             // Use parseStreamingResponse to handle the stream
             const streamParser = parseStreamingResponse(response);
@@ -249,8 +252,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     // If user has scrolled up, just update content without scrolling
                     if (captureReferences) {
                         referencesPart += chunk;
-                    } else if (chunk.includes('\n\n\n') && !hasConversationStarted) {
-                        // Only capture references for initial responses, not talker responses
+                    } else if (chunk.includes('\n\n\n')) {
                         captureReferences = true;
                         const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
                         assistantMessage += beforeSeparator;
@@ -266,8 +268,7 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                     // Normal flow with scrolling
                     if (captureReferences) {
                         referencesPart += chunk;
-                    } else if (chunk.includes('\n\n\n') && !hasConversationStarted) {
-                        // Only capture references for initial responses, not talker responses
+                    } else if (chunk.includes('\n\n\n')) {
                         captureReferences = true;
                         const [beforeSeparator, afterSeparator] = chunk.split('\n\n\n', 2);
                         assistantMessage += beforeSeparator;
@@ -282,8 +283,8 @@ const Chat: React.FC<ChatProps> = ({ mode }) => {
                 }
             }
 
-            // Apply references if found (only for initial responses)
-            if (referencesPart.trim() && !hasConversationStarted) {
+            // Apply references if found
+            if (referencesPart.trim()) {
                 addReferencesToLastAssistantMessage(referencesPart.trim());
                 // Store references for sharing with subsequent messages
                 setSharedReferences(referencesPart.trim());
