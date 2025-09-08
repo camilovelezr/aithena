@@ -22,45 +22,45 @@ All elements are containerized with Docker (except the disk)
 
 ```mermaid
 architecture-beta
-    group nih_firewall(cloud)[NIH Firewall]
+    group nih_firewall(logos:aws-vpc)[NIH Firewall]
     group polus1(server)[polus1] in nih_firewall
     group polus2(server)[polus2] in nih_firewall
-    group external1(internet)[External APIs]
-    group external2(internet)[External APIs]
+    group external1(server)[External APIs]
+    group external2(server)[External APIs]
 
-    service user(cloud)[User] in nih_firewall
+    service user(logos:yarn)[User] in nih_firewall
 
-    service nginx1(cloud)[nginx] in polus1
-    service nginx2(cloud)[nginx] in polus2
+    service nginx1(logos:nginx)[nginx] in polus1
+    service nginx2(logos:nginx)[nginx] in polus2
 
-    service postgres1(database)[Postgres pgvector] in polus1
-    service postgres2(database)[Postgres pgvector] in polus2
+    service postgres1(logos:postgresql)[Postgres pgvector] in polus1
+    service postgres2(logos:postgresql)[Postgres pgvector] in polus2
     service disk1(disk)[disk] in polus1
     service disk2(disk)[disk] in polus2
     service minio1(disk)[MinIO] in polus1
     service minio2(disk)[MinIO] in polus2
-    service rabbitmq1(server)[RabbitMQ] in polus1
-    service rabbitmq2(server)[RabbitMQ] in polus2
-    service litellm1(server)[LiteLLM] in polus1
-    service ollama1(server)[Ollama] in polus1
-    service litellm2(server)[LiteLLM] in polus2
-    service ollama2(server)[Ollama] in polus2
+    service rabbitmq1(logos:rabbitmq-icon)[RabbitMQ] in polus1
+    service rabbitmq2(logos:rabbitmq-icon)[RabbitMQ] in polus2
+    service litellm1(logos:nodebots)[LiteLLM] in polus1
+    service ollama1(logos:nodebots)[Ollama] in polus1
+    service litellm2(logos:nodebots)[LiteLLM] in polus2
+    service ollama2(logos:nodebots)[Ollama] in polus2
 
-    service aithenahub(cloud)[Aithena Hub] in polus1
-    service gardchat(cloud)[GARD Chatbot] in polus1
-    service sequentialmcp(server)[Sequential Thinking MCP] in polus1
-    service askaithenamcp(server)[Ask AIthena MCP] in polus1
-    service timemcp(server)[Time MCP] in polus1
-    service askaithena(cloud)[Ask Aithena] in polus2
-    service askaithenaapi(server)[Ask Aithena API] in polus2
-    service gardapi(server)[GARD Chatbot API] in polus1
+    service aithenahub(logos:react)[Aithena Hub] in polus1
+    service gardchat(logos:react)[GARD Chatbot] in polus1
+    service sequentialmcp(logos:docker)[Sequential Thinking MCP] in polus1
+    service askaithenamcp(logos:docker)[Ask AIthena MCP] in polus1
+    service timemcp(logos:docker)[Time MCP] in polus1
+    service askaithena(logos:react)[Ask Aithena] in polus2
+    service askaithenaapi(logos:fastapi-icon)[Ask Aithena API] in polus2
+    service gardapi(logos:fastapi-icon)[GARD Chatbot API] in polus1
 
-    service openai1(cloud)[ChatGPT] in external1
-    service anthropic1(cloud)[Claude] in external1
-    service awsbedrock1(cloud)[AWS Bedrock] in external1
-    service openai2(cloud)[ChatGPT] in external2
-    service anthropic2(cloud)[Claude] in external2
-    service awsbedrock2(cloud)[AWS Bedrock] in external2
+    service openai1(logos:openai)[ChatGPT] in external1
+    service anthropic1(logos:anthropic-icon)[Claude] in external1
+    service awsbedrock1(logos:aws-sns)[AWS Bedrock] in external1
+    service openai2(logos:openai)[ChatGPT] in external2
+    service anthropic2(logos:anthropic-icon)[Claude] in external2
+    service awsbedrock2(logos:aws-sns)[AWS Bedrock] in external2
 
     junction j1p1mcp in polus1
     junction j2p1mcp in polus1
