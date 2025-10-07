@@ -18,7 +18,7 @@ from pydantic import model_validator
 from pydantic.dataclasses import dataclass
 from tqdm import tqdm
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 logger = get_logger(__file__)
 
@@ -145,7 +145,14 @@ class SnapshotS3:
     ) -> dict[str, Any] | list[str]:
         """List objects in S3 bucket.
 
-        If `names=True`, return only the names of the objects (files-dirs).
+        Args:
+            prefix: Prefix to list objects from.
+            delimiter: Delimiter to list objects from.
+            names: If True, return only the names of the objects (files-dirs).
+            **kwargs: Additional arguments to pass to the S3 API.
+
+        Returns:
+            dict[str, Any] | list[str]: Response from the S3 API.
         """
         if prefix is not None:
             kwargs["Prefix"] = prefix
@@ -166,7 +173,13 @@ class SnapshotS3:
         from_date: str | date | None = None,
         **kwargs: dict[str, Any],
     ) -> list[S3Directory]:
-        """List directories in S3 bucket."""
+        """List directories in S3 bucket.
+
+        Args:
+            type_: Type of data to list directories for.
+            from_date: Date to list directories from (inclusive).
+            **kwargs: Additional arguments to pass to the S3 API.
+        """
         logger.debug(f"Listing directories for {type_}, from_date={from_date}")
         res = self.ls(prefix=f"data/{type_}/", delimiter="/", **kwargs)
         cp = res.get("CommonPrefixes", [])
@@ -185,7 +198,15 @@ class SnapshotS3:
         from_date: str | date | None = None,
         **kwargs: dict[str, Any],
     ) -> dict[str, list[S3Directory]]:
-        """List directories in S3 bucket as a dictionary."""
+        """List directories in S3 bucket as a dictionary.
+
+        Args:
+            from_date: Date to list directories from (inclusive).
+            **kwargs: Additional arguments to pass to the S3 API.
+
+        Returns:
+            dict[str, list[S3Directory]]: Dictionary of types and their directories.
+        """
         result_dict = {}
         for tp in TYPES:
             result_dict[tp] = self.ls_dirs(tp, from_date=from_date, **kwargs)
@@ -199,7 +220,13 @@ class SnapshotS3:
     ) -> Path | list[Path]:
         """Download directory from S3 - Recursive.
 
-        If `return_list=True`, return a list of Paths to the downloaded files.
+        Args:
+            name: S3Directory to download.
+            output_path: Path to download the directory to.
+            return_list: If True, return a list of Paths to the downloaded files.
+
+        Returns:
+            Path | list[Path]: Path to the downloaded directory or list of paths.
         """
         outdir = Path(output_path)
         files_ = self.ls(prefix=name.Prefix, names=True)
@@ -231,7 +258,14 @@ class SnapshotS3:
         from_date: str | date | None = None,
         return_list: bool = False,
     ) -> Path | list[Path]:
-        """Download all files of a specific OpenAlex type from S3 - Recursively."""
+        """Download all files of a specific OpenAlex type from S3 - Recursively.
+
+        Args:
+            type_: Type of data to download.
+            output_path: Path to download the data to.
+            from_date: Date to download data from (inclusive).
+            return_list: If True, return a list of Paths to the downloaded files.
+        """
         s3_dirs = self.ls_dirs(type_, from_date=from_date)
         logger.info(
             f"Downloading {type_} to {output_path}, found {len(s3_dirs)} directories",
@@ -249,7 +283,7 @@ class SnapshotS3:
                 self.download_dir(s3_dir, out_dir_full)
         if return_list:
             return path_list
-        return path_list if return_list else output_path
+        return output_path
 
     def download_all(
         self,
@@ -257,7 +291,13 @@ class SnapshotS3:
         from_date: str | date | None = None,
         return_list: bool = False,
     ) -> Path | dict[str, list[Path]]:
-        """Download all files from S3 - Recursively."""
+        """Download all files from S3 - Recursively.
+
+        Args:
+            output_path: Path to download the data to.
+            from_date: Date to download data from (inclusive).
+            return_list: If True, return a list of Paths to the downloaded files.
+        """
         result_data: dict[str, list[Path]] = {}
         for tp in TYPES:
             downloaded = self.download_all_of_type(

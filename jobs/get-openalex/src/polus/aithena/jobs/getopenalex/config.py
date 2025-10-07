@@ -9,7 +9,7 @@ import os
 from dotenv import find_dotenv
 from dotenv import load_dotenv
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 logger = get_logger(__name__)
 

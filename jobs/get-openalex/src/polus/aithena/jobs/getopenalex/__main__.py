@@ -7,7 +7,7 @@ and REST API interactions.
 
 import typer
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex.s3.__main__ import app as s3_app
 
 logger = get_logger(__name__)
@@ -56,14 +56,24 @@ def search_works(
     ),
 ) -> None:
     """Search for works using the OpenAlex REST API."""
-    from polus.aithena.jobs.getopenalex import get_filtered_works
+    from polus.aithena.jobs.getopenalex.rest.get_works import get_filtered_works_dict
 
     filters = {}
     if from_date:
         filters["from_publication_date"] = from_date
 
     logger.info(f"Searching for '{query}' with filters {filters}")
-    works = get_filtered_works(search=query, filters=filters, limit=limit)
+    
+    # Use the correct search field for OpenAlex API
+    # 'default.search' searches across multiple fields
+    if query:
+        filters["default.search"] = query
+    
+    works = get_filtered_works_dict(
+        filters=filters, 
+        max_results=limit,
+        convert_to_model=True
+    )
 
     if output_format == "text":
         for i, work in enumerate(works, 1):
@@ -94,7 +104,7 @@ def serve(
     reload: bool = typer.Option(False, help="Enable auto-reload for development"),
 ) -> None:
     """Start the OpenAlex API server."""
-    from polus.aithena.jobs.getopenalex.api.run import start_server
+    from polus.aithena.jobs.getopenalex.api.run import main as start_server
 
     typer.echo(f"Starting API server at {host}:{port}")
     start_server(host=host, port=port, reload=reload)

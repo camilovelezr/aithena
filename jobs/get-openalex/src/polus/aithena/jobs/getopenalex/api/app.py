@@ -13,32 +13,20 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.exc import SQLAlchemyError
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex import APIError
 from polus.aithena.jobs.getopenalex import OpenAlexError
 from polus.aithena.jobs.getopenalex import RateLimitError
 from polus.aithena.jobs.getopenalex import WorksPaginator
 from polus.aithena.jobs.getopenalex import get_filtered_works_async
-from polus.aithena.jobs.getopenalex.api.database import Database
 from polus.aithena.jobs.getopenalex.api.database import Job as DBJob
-from polus.aithena.jobs.getopenalex.api.database import JobRepository
 from polus.aithena.jobs.getopenalex.api.database import JobStatus
 from polus.aithena.jobs.getopenalex.api.database import JobType
+from polus.aithena.jobs.getopenalex.api.database_manager import db_manager
 from polus.aithena.jobs.getopenalex.api.update import run_works_update
 from polus.aithena.jobs.getopenalex.config import USE_POSTGRES
 
 logger = get_logger(__name__)
-
-# Initialize database
-db = Database()
-job_repo = JobRepository(db)
-
-# Create database tables
-with contextlib.suppress(SQLAlchemyError):
-    try:
-        db.create_tables()
-    except SQLAlchemyError as e:
-        logger.error(f"Error creating database tables: {e!s}")
 
 app = FastAPI(
     title="OpenAlex API",
@@ -54,6 +42,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on server startup."""
+    logger.info("Starting FastAPI server, initializing database...")
+    db_manager.initialize()
+    logger.info("Database initialization complete")
 
 
 # Models
@@ -443,6 +439,9 @@ async def get_jobs(
 ) -> list[Job]:
     """Get a list of jobs."""
     try:
+        # Get job repository (will initialize database if needed)
+        job_repo = db_manager.job_repo
+        
         if status:
             try:
                 status_enum = JobStatus(status.upper())
@@ -479,6 +478,7 @@ async def get_jobs(
 @app.get("/jobs/{job_id}", response_model=Job)
 async def get_job(job_id: int) -> Job:
     """Get a specific job by ID."""
+    job_repo = db_manager.job_repo
     job = job_repo.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job with ID {job_id} not found")
@@ -488,6 +488,7 @@ async def get_job(job_id: int) -> Job:
 @app.get("/jobs/{job_id}/logs", response_model=list[JobLogEntry])
 async def get_job_logs(job_id: int) -> list[JobLogEntry]:
     """Get logs for a specific job."""
+    job_repo = db_manager.job_repo
     job = job_repo.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job with ID {job_id} not found")
@@ -561,7 +562,8 @@ async def start_update_job(
             else USE_POSTGRES
         )
 
-        # Create job
+        # Create job (will initialize database if needed)
+        job_repo = db_manager.job_repo
         job = job_repo.create_job(
             job_type=job_type_enum,
             parameters={

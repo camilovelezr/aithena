@@ -16,7 +16,7 @@ from openalex_types import Work
 from pyalex import Work as PyalexWork
 from pyalex import Works
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex.config import OPENALEX_API_KEY
 from polus.aithena.jobs.getopenalex.config import PYALEX_EMAIL
 

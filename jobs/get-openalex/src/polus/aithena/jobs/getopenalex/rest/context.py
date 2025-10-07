@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import aiohttp
 
 # Local imports
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 from .common import API_REQUEST_TIMEOUT
 from .metrics import metrics_collector

@@ -11,7 +11,7 @@ from typing import TypeVar
 import httpx
 import requests  # Import requests library
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 from .common import MAX_RETRIES
 from .common import APIError

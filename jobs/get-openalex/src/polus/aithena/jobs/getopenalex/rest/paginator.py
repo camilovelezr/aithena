@@ -19,7 +19,7 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 from .common import RATE_LIMIT_DELAY
 

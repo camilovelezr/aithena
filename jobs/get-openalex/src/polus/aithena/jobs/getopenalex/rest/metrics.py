@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 # Local imports
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -5,7 +5,7 @@ from typing import Annotated
 import typer
 import uvicorn
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex.config import API_HOST
 from polus.aithena.jobs.getopenalex.config import API_PORT
 

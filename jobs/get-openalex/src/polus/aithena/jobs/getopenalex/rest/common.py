@@ -1,7 +1,7 @@
 """Common utilities for the OpenAlex REST API."""
 
 # Local imports
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex.config import API_MAX_RETRIES
 from polus.aithena.jobs.getopenalex.config import API_REQUEST_TIMEOUT
 

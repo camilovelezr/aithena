@@ -18,7 +18,7 @@ from sqlmodel import SQLModel
 from sqlmodel import create_engine
 from sqlmodel import select
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex.config import JOB_DATABASE_URL
 
 logger = get_logger(__name__)

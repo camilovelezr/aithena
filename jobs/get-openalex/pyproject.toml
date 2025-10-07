@@ -3,11 +3,10 @@ name = "get-openalex"
 version = "0.1.0-dev1"
 description = "get-openalex - Tool for downloading OpenAlex records from their S3 bucket and interacting with OpenAlex REST API"
 authors = [{ name = "Camilo Velez", email = "camilo.velezramirez@nih.gov" }]
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12"
 readme = "README.md"
 dependencies = [
     "boto3>=1.35.63,<2",
-    "polus-aithena-common",
     "tqdm>=4.67.0,<5",
     "typer>=0.12.5,<0.13",
     "openalex-types",
@@ -16,11 +15,12 @@ dependencies = [
     "aiohttp>=3.9.1,<4",
     "pydantic>=2.5.2,<3",
     "sqlmodel>=0.0.14,<0.0.15",
-    "psycopg2-binary>=2.9.9,<3",
+    "psycopg[binary]>=3.2.0",
     "uvicorn[standard]>=0.25.0,<0.26",
     "httpx>=0.28.1,<0.29",
     "pyalex>=0.16,<0.17",
     "fastapi[standard]>=0.115.11,<0.116",
+    "rich>=14.1.0",
 ]
 
 [project.scripts]
@@ -39,7 +39,6 @@ dev = [
 ]
 
 [tool.uv.sources]
-polus-aithena-common = { path = "../../common", editable = true }
 openalex-types = { git = "https://github.com/camilovelezr/openalex-types.git" }
 
 [tool.hatch.build.targets.sdist]

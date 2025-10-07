@@ -19,7 +19,7 @@ from sqlmodel import col
 from sqlmodel import create_engine
 from sqlmodel import select
 
-from polus.aithena.common.logger import get_logger
+from polus.aithena.jobs.getopenalex.logger import get_logger
 from polus.aithena.jobs.getopenalex import iter_filtered_works_cursor
 from polus.aithena.jobs.getopenalex.api.database import Database
 from polus.aithena.jobs.getopenalex.api.database import Job

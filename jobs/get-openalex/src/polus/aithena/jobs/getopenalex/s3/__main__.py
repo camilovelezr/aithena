@@ -6,8 +6,8 @@ from pathlib import Path
 
 import typer
 
-from polus.aithena.common.logger import get_logger
-from polus.aithena.common.utils import init_dir
+from polus.aithena.jobs.getopenalex.logger import get_logger
+from polus.aithena.jobs.getopenalex.utils import init_dir
 from polus.aithena.jobs.getopenalex.config import S3_ALL_LAST_MONTH
 from polus.aithena.jobs.getopenalex.config import S3_FROM_DATE
 from polus.aithena.jobs.getopenalex.config import S3_OUTPUT_PATH
