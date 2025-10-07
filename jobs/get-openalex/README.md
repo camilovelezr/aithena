@@ -118,7 +118,6 @@ get-openalex-s3 download --outDir "/path/to/output" --fromDate "2023-01-01"
 You can specify if you want to download only data for a specific OpenAlex Object:
 
 ```shell
-<<<<<<< HEAD
 get-openalex s3 download --outDir "/path/to/output" --fromDate "2023-01-01" --onlyType "Authors"
 ```
 
@@ -140,23 +139,6 @@ The value of `onlyType` must be a single string, one of:
 If no date is specified and the value of environment variable `ALL_MONTH` is either not set or it is set to `False` or `0`, **all the data** will be downloaded.
 The date must follow ISO8601 format, for example: "2024-11-28"
 
-=======
-get-openalex  --outDir "/Users/aithena/openalex/data" --fromDate "2020-01-01" --onlyType "Authors"
-```
-
-This, for example, would download only Authors.
-The value of `onlyType` must be a single string:
-one of the types of OpenAlex Objects (Authors, Works, Topics...)
-
-
-### fromDate - FROM_DATE
-
-`--fromDate` or the environment variable `FROM_DATE` will specify the **first** day from when data will be downloaded.
-If no date is specified and the value of environment variable `ALL_MONTH` is either not set or it is set to `False` or `0`, **all the data** will be downloaded.
-The date must follow ISO8601 format, for example: "2024-11-28"
-
-
->>>>>>> main
 ### env: ALL_LAST_MONTH
 
 If `ALL_LAST_MONTH` is set to `True` or `1`, when `get-openalex` is executed, the value of `fromDate` will be the result of executing:
@@ -167,7 +149,6 @@ today_ = date.today()
 from_date = today_.replace(day=1, month=today_.month-1).isoformat()
 ```
 so all data starting from the first day of the current month will be downloaded.
-<<<<<<< HEAD
 This would mean that the job needs to be run on the first day of each month.
 
 ## 💻 Python API
@@ -531,32 +512,3 @@ For more detailed documentation, see the [docs](docs) directory:
 - [Database Updates](docs/database_updates.md) - Guide to using the PostgreSQL integration (optional)
 - [Technical Details](docs/technical_details.md) - Details about the database models and logging
 - [Environment Variables](docs/environment_variables.md) - Complete reference for all configuration options
-=======
-This would mean that the job needs to be ran on the first day of each month.
-
-
-# Docker 
-
-Example query:
-
-```shell
-docker run -v ${DATA_DIR}:/outDir ${DOCKER_ORG}/get-openalex:${VERSION} --fromDate 2024-11-29 
---outDir=/outDir --onlyType Authors 
-
-```
-
-# Helm 
-
-```
-cd helm
-```
-
-Make sure to update `values.yaml`
-
-In particular, the `persistentVolume:hostPath` entry.
-
-```shell
-microk8s kubectl create namespace job
-microk8s helm install getoa . -n job
-```
->>>>>>> main
