@@ -10,29 +10,29 @@ const wsLogger = new SecureLogger('WebSocket-Client');
 
 // Constants for RabbitMQ configuration
 const DEFAULT_EXCHANGE = 'ask-aithena-exchange';
-const DEFAULT_WS_URL = '/api/rabbitmq/ws'; // Updated to match API response
 
 interface RabbitMQConfig {
     wsUrl: string;
     exchange: string;
 }
 
-// Function to get RabbitMQ configuration from server
 async function getRabbitMQConfig(): Promise<RabbitMQConfig> {
-    try {
-        const response = await fetch('/api/rabbitmq');
-        if (!response.ok) {
-            throw new Error('Failed to fetch RabbitMQ config');
-        }
-        return await response.json();
-    } catch (error) {
-        wsLogger.error('Error fetching RabbitMQ config', error);
-        // Use default values
-        return {
-            wsUrl: DEFAULT_WS_URL,
-            exchange: DEFAULT_EXCHANGE
-        };
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    const wsUrl = config.rabbitmqWsUrl;
+
+    if (!wsUrl) {
+        const error = 'RabbitMQ WS URL not found in runtime config';
+        wsLogger.error(error);
+        throw new Error(error);
     }
+
+    wsLogger.debug('RabbitMQ config from runtime', { wsUrl: '[REDACTED]' });
+
+    return {
+        wsUrl,
+        exchange: DEFAULT_EXCHANGE
+    };
 }
 
 class RabbitMQService {
@@ -43,10 +43,7 @@ class RabbitMQService {
     private connectionChangeCallback: ((isConnected: boolean) => void) | null = null;
     private heartbeatInterval: any = null;
     private sessionId: string | null = null;
-    private config: RabbitMQConfig = {
-        wsUrl: DEFAULT_WS_URL,
-        exchange: DEFAULT_EXCHANGE
-    };
+    private config: RabbitMQConfig | null = null;
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 5;
 
@@ -81,27 +78,39 @@ class RabbitMQService {
             return;
         }
 
-        // Get configuration from server
+        // Get configuration from environment
         try {
             this.config = await getRabbitMQConfig();
             wsLogger.debug('Got RabbitMQ config', { exchange: this.config.exchange });
         } catch (error) {
             wsLogger.error('Failed to get RabbitMQ config', error);
-            // Use defaults
-            this.config = {
-                wsUrl: DEFAULT_WS_URL,
-                exchange: DEFAULT_EXCHANGE
-            };
+            throw error;
         }
 
         return new Promise((resolve, reject) => {
             // Clean up existing resources
             this.cleanup();
 
-            // Construct the WebSocket URL
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}${this.config.wsUrl}`;
-            wsLogger.debug('Connecting to STOMP WebSocket', { protocol });
+            // Use the WebSocket URL directly from configuration
+            if (!this.config) {
+                reject(new Error('RabbitMQ configuration not initialized'));
+                return;
+            }
+            
+            // Build full WebSocket URL from relative path
+            let wsUrl = this.config.wsUrl;
+            
+            // If it's a relative path, construct full URL
+            if (wsUrl.startsWith('/')) {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                wsUrl = `${protocol}//${host}${wsUrl}`;
+            }
+            
+            wsLogger.debug('Connecting to STOMP WebSocket', { 
+                originalUrl: this.config.wsUrl,
+                fullUrl: wsUrl 
+            });
 
             // Create a new STOMP client
             this.client = new Client({
@@ -211,8 +220,8 @@ class RabbitMQService {
     }
 
     private subscribe(): void {
-        if (!this.client || !this.sessionId) {
-            wsLogger.error('Cannot subscribe: client not initialized or session ID not set');
+        if (!this.client || !this.sessionId || !this.config) {
+            wsLogger.error('Cannot subscribe: client not initialized or session ID not set or config missing');
             return;
         }
 

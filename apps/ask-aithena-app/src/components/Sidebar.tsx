@@ -132,7 +132,30 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     const { connected, statusUpdates } = useRabbitMQ();
     const { healthStatus, error: apiCheckError, loading: apiCheckLoading, refreshStatus } = useApiHealth();
     const { endpoints } = useEndpoints();
-    const isDevMode = process.env.NODE_ENV === 'development';
+    
+    // Development mode detection using runtime config from API
+    const [isDevMode, setIsDevMode] = useState(false);
+    
+    useEffect(() => {
+        // Fetch runtime configuration from API endpoint
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(data => {
+                const isDev = data.isDevelopment || false;
+                setIsDevMode(isDev);
+                console.log('[Sidebar] Environment check:', {
+                    appEnv: data.appEnv,
+                    nodeEnv: data.nodeEnv,
+                    isDevelopment: data.isDevelopment,
+                    isDevMode: isDev
+                });
+            })
+            .catch(error => {
+                console.error('[Sidebar] Failed to fetch config:', error);
+                setIsDevMode(false);
+            });
+    }, []);
+    
     const { settings, updateSettings } = useSettings();
     
     // Force refresh of connection status

@@ -25,9 +25,25 @@ class SecureLogger {
 
   constructor(serviceName: string) {
     this.serviceName = serviceName;
-    // Check both NODE_ENV and APP_ENV
-    this.isDevelopment = process.env.NODE_ENV === 'development' || 
-                        process.env.APP_ENV === 'development';
+    
+    // Check both NODE_ENV and APP_ENV (from runtime config if available)
+    let runtimeAppEnv = 'production';
+    try {
+      // Only try to get runtime config on client side
+      if (typeof window !== 'undefined') {
+        const getConfig = require('next/config').default;
+        const { publicRuntimeConfig } = getConfig() || { publicRuntimeConfig: {} };
+        runtimeAppEnv = publicRuntimeConfig.APP_ENV || 'production';
+      } else {
+        // On server side, use environment variable directly
+        runtimeAppEnv = process.env.APP_ENV || 'production';
+      }
+    } catch (e) {
+      // Fallback if getConfig fails
+      runtimeAppEnv = process.env.APP_ENV || 'production';
+    }
+    
+    this.isDevelopment = process.env.NODE_ENV === 'development' || runtimeAppEnv === 'development';
   }
 
   /**

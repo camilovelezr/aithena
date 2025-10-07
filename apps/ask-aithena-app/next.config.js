@@ -1,12 +1,5 @@
 /** @type {import('next').NextConfig} */
 
-// Use environment variables directly from ConfigMap
-const API_URL = process.env.API_URL || 'http://ask-aithena-agent-service:8000';
-const RABBITMQ_WS_URL = process.env.RABBITMQ_WS_URL || 'ws://rabbitmq-service:15674/ws';
-
-// Configuration is loaded from environment variables
-// Logging is handled by the secure logger in the application
-
 const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
@@ -24,36 +17,16 @@ const nextConfig = {
         // Don't override devtool in development to avoid performance issues
         return config;
     },
-    serverRuntimeConfig: {
-        // Server-side only variables
-        API_URL: API_URL,
-        RABBITMQ_WS_URL: RABBITMQ_WS_URL,
-        APP_ENV: process.env.APP_ENV || 'production',
-    },
-    // Client-side variables must be prefixed with NEXT_PUBLIC_
+    // Public runtime configuration - accessible on both client and server
     publicRuntimeConfig: {
-        API_URL: process.env.NEXT_PUBLIC_API_URL || '/api',
-        RABBITMQ_WS_URL: process.env.NEXT_PUBLIC_RABBITMQ_WS_URL || '/askaithena/rabbitmq/ws',
+        API_URL: process.env.NEXT_PUBLIC_API_URL,
+        RABBITMQ_WS_URL: process.env.NEXT_PUBLIC_RABBITMQ_WS_URL,
         APP_ENV: process.env.APP_ENV || 'production',
     },
-    // Define rewrites to handle proxying
-    async rewrites() {
-        const rewrites = [
-            {
-                source: '/api/:path*',
-                destination: `${API_URL}/:path*`,
-            },
-            {
-                source: '/api/rabbitmq/ws',
-                destination: RABBITMQ_WS_URL.replace('ws://', 'http://'),
-            },
-            {
-                source: '/askaithena/rabbitmq/ws',
-                destination: RABBITMQ_WS_URL.replace('ws://', 'http://'),
-            }
-        ];
-        
-        return rewrites;
+    // Environment variables with NEXT_PUBLIC_ prefix are automatically available to the browser
+    env: {
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        NEXT_PUBLIC_RABBITMQ_WS_URL: process.env.NEXT_PUBLIC_RABBITMQ_WS_URL,
     }
 };
 

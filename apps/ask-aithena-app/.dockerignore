@@ -189,3 +189,5 @@ node_modules
 # secrets
 **/**-secret.yaml
 **/secrets/
+
+.next

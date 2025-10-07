@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import { request } from 'undici';
-import { API_URL } from '@/lib/server/config';
+import { INTERNAL_API_URL } from '@/lib/server/config';
 
 export async function GET() {
     try {
-        const { body, statusCode } = await request(`${API_URL}/health`, {
+        // During build time, environment variables may not be available
+        if (INTERNAL_API_URL.includes('__INTERNAL_API_URL_NOT_SET__')) {
+            return NextResponse.json(
+                { 
+                    status: 'error',
+                    error: 'Internal API URL not configured'
+                },
+                { status: 503 }
+            );
+        }
+
+        const { body, statusCode } = await request(`${INTERNAL_API_URL}/health`, {
             method: 'GET',
             // Health checks should have reasonable timeouts
             bodyTimeout: 30000, // 30 seconds

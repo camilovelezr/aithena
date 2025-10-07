@@ -1,10 +1,50 @@
-// Load environment variables from .env.local
-require('dotenv').config({ path: '.env.local' });
+// Load environment variables from .env.local (for local development only)
+// In production, environment variables come from Kubernetes ConfigMap
+try {
+    require('dotenv').config({ path: '.env.local' });
+} catch (e) {
+    // dotenv is not available in production, which is fine
+}
 
 const http = require('http');
 const { parse } = require('url');
 const next = require('next');
 const httpProxy = require('http-proxy');
+const fs = require('fs');
+
+// Load runtime configuration
+function loadRuntimeConfig() {
+    // Try to load from mounted config file in Kubernetes
+    const configPath = '/app/config/runtime.json';
+    
+    try {
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            console.log('✓ Runtime config loaded from:', configPath);
+            return config;
+        }
+    } catch (error) {
+        console.error('Error reading runtime config file:', error);
+    }
+    
+    // Fallback to environment variables for local development
+    console.log('⚠ Using environment variables (config file not found)');
+    return {
+        appEnv: process.env.APP_ENV || 'production',
+        internalApiUrl: process.env.INTERNAL_API_URL || 'http://localhost:8000',
+        internalRabbitmqWsUrl: process.env.INTERNAL_RABBITMQ_WS_URL || 'ws://localhost:15674/ws'
+    };
+}
+
+// Load config at startup
+const runtimeConfig = loadRuntimeConfig();
+
+// CRITICAL: Set process.env from runtime config so Next.js API routes can access them
+process.env.APP_ENV = runtimeConfig.appEnv || process.env.APP_ENV || 'production';
+// NODE_ENV is set from the Kubernetes environment, not the runtime config.
+// This is crucial for the Next.js server to start correctly with a standalone build.
+process.env.INTERNAL_API_URL = runtimeConfig.internalApiUrl || process.env.INTERNAL_API_URL;
+process.env.INTERNAL_RABBITMQ_WS_URL = runtimeConfig.internalRabbitmqWsUrl || process.env.INTERNAL_RABBITMQ_WS_URL;
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = dev ? 'localhost' : '0.0.0.0';
@@ -14,109 +54,71 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// Use environment variables directly
-const API_URL = process.env.API_URL || 'http://ask-aithena-agent-service:8000';
-const RABBITMQ_WS_URL = process.env.RABBITMQ_WS_URL || 'ws://rabbitmq-service:15674/ws';
-
-// Log environment variables for debugging
-console.log('Environment configuration:');
+// Log configuration
+console.log('Server configuration:');
 console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('APP_ENV:', process.env.APP_ENV || 'production');
-console.log('API_URL:', API_URL);
-console.log('RABBITMQ_WS_URL:', RABBITMQ_WS_URL);
+console.log('APP_ENV:', process.env.APP_ENV);
+console.log('Internal API URL:', runtimeConfig.internalApiUrl);
+console.log('Internal RabbitMQ WS URL:', runtimeConfig.internalRabbitmqWsUrl);
+console.log('Public paths: /api → API proxy, /rabbitmq/ws → WebSocket proxy');
 
-if (!API_URL || !RABBITMQ_WS_URL) {
-    console.warn('Environment variables using defaults:');
-    console.warn('- API_URL:', API_URL);
-    console.warn('- RABBITMQ_WS_URL:', RABBITMQ_WS_URL);
-}
-
-// Create a proxy server for WebSocket connections with extended timeouts
-const proxy = httpProxy.createProxyServer({
+// Create a proxy server for WebSocket connections
+const wsProxy = httpProxy.createProxyServer({
     ws: true,
     changeOrigin: true,
-    target: RABBITMQ_WS_URL,
-    headers: {
-        'Upgrade': 'websocket',
-        'Connection': 'Upgrade'
-    },
-    // Add timeout configurations
+    target: runtimeConfig.internalRabbitmqWsUrl,
+    // Timeout configurations
     proxyTimeout: 3600000, // 1 hour
     timeout: 3600000, // 1 hour
 });
 
-// Handle proxy errors with detailed logging
-proxy.on('error', function(err, req, res) {
-    console.error('Proxy error:', {
+// Handle proxy errors
+wsProxy.on('error', function(err, req, res) {
+    console.error('WebSocket proxy error:', {
         error: err.message,
         code: err.code,
-        stack: err.stack,
         url: req?.url,
-        method: req?.method,
-        headers: req?.headers
+        target: runtimeConfig.internalRabbitmqWsUrl,
+        stack: err.stack
     });
     
-    if (res.writeHead) {
+    if (res && res.writeHead && !res.headersSent) {
         res.writeHead(504, {
             'Content-Type': 'application/json'
         });
         res.end(JSON.stringify({
             error: 'Gateway Timeout',
-            message: 'The request took too long to complete'
+            message: 'Failed to connect to RabbitMQ service'
         }));
     }
 });
 
-// Handle WebSocket proxy errors and setup
-proxy.on('proxyReqWs', function(proxyReq, req, socket, options, head) {
+// Log successful WebSocket connections
+wsProxy.on('open', function(proxySocket) {
+    console.log('WebSocket connection opened to RabbitMQ');
+});
+
+wsProxy.on('close', function(res, socket, head) {
+    console.log('WebSocket connection closed');
+});
+
+// Log WebSocket proxy requests
+wsProxy.on('proxyReqWs', function(proxyReq, req, socket, options, head) {
     console.log('WebSocket proxy request:', {
         url: req.url,
-        headers: req.headers,
-        target: options.target
+        target: runtimeConfig.internalRabbitmqWsUrl,
+        headers: req.headers
     });
-
-    // Add necessary headers for WebSocket upgrade
-    proxyReq.setHeader('Upgrade', 'websocket');
-    proxyReq.setHeader('Connection', 'Upgrade');
-    proxyReq.setHeader('Sec-WebSocket-Version', '13');
     
     socket.on('error', function(err) {
         console.error('WebSocket socket error:', err);
     });
 });
 
-// Log successful proxy events with more details
-proxy.on('proxyRes', function (proxyRes, req, res) {
-    console.log('Proxy response:', {
-        statusCode: proxyRes.statusCode,
-        headers: proxyRes.headers,
-        url: req.url,
-        method: req.method,
-        timing: {
-            startTime: req._startTime,
-            endTime: new Date(),
-            duration: new Date() - req._startTime
-        }
-    });
-});
-
 app.prepare().then(() => {
     const server = http.createServer(async (req, res) => {
         try {
-            // Add request start time for timing
-            req._startTime = new Date();
-            
             const parsedUrl = parse(req.url, true);
-            
-            // Handle API requests with extended timeout
-            if (parsedUrl.pathname.startsWith('/api/')) {
-                return proxy.web(req, res, {
-                    target: API_URL,
-                    timeout: 3600000, // 1 hour
-                    proxyTimeout: 3600000 // 1 hour
-                });
-            }
-            
             await handle(req, res, parsedUrl);
         } catch (err) {
             console.error('Error occurred handling request:', {
@@ -134,25 +136,26 @@ app.prepare().then(() => {
     server.on('upgrade', function (req, socket, head) {
         const parsedUrl = parse(req.url);
         
-        // Handle both WebSocket paths
-        if (parsedUrl.pathname === '/api/rabbitmq/ws' || parsedUrl.pathname === '/askaithena/rabbitmq/ws') {
-            console.log(`Upgrading WebSocket connection on path ${parsedUrl.pathname} to:`, RABBITMQ_WS_URL);
-            console.log('Request headers:', req.headers);
+        // Proxy WebSocket connections to internal RabbitMQ service
+        // Handle both direct path and ingress-prefixed path
+        if (parsedUrl.pathname === '/rabbitmq/ws' || 
+            parsedUrl.pathname === '/askaithena/rabbitmq/ws' ||
+            parsedUrl.pathname.endsWith('/rabbitmq/ws')) {
+            console.log('Upgrading WebSocket connection to internal RabbitMQ:', runtimeConfig.internalRabbitmqWsUrl);
+            console.log('Original path:', parsedUrl.pathname);
+            console.log('Headers:', req.headers);
             
-            // Ensure WebSocket upgrade headers
-            req.headers.upgrade = 'websocket';
-            req.headers.connection = 'Upgrade';
-            
-            proxy.ws(req, socket, head, {
-                target: RABBITMQ_WS_URL,
-                timeout: 3600000, // 1 hour
-                proxyTimeout: 3600000, // 1 hour
-                headers: {
-                    'Upgrade': 'websocket',
-                    'Connection': 'Upgrade'
+            // Forward the request to RabbitMQ
+            wsProxy.ws(req, socket, head, {
+                target: runtimeConfig.internalRabbitmqWsUrl
+            }, function(err) {
+                if (err) {
+                    console.error('Error during WebSocket proxy:', err);
+                    socket.end();
                 }
             });
         } else {
+            console.log('Unknown WebSocket path:', parsedUrl.pathname);
             socket.destroy();
         }
     });
@@ -160,10 +163,9 @@ app.prepare().then(() => {
     server.listen(port, hostname, (err) => {
         if (err) throw err;
         console.log(`> Ready on http://${hostname}:${port}`);
-        console.log('> WebSocket proxy configured for:');
-        console.log('  - /api/rabbitmq/ws');
-        console.log('  - /askaithena/rabbitmq/ws');
-        console.log(`> Using RabbitMQ WebSocket URL: ${RABBITMQ_WS_URL}`);
-        console.log('> Proxy timeouts set to 1 hour');
+        console.log('> Server-side proxy mode: Next.js proxies to internal services');
+        console.log(`> Internal API URL: ${runtimeConfig.internalApiUrl}`);
+        console.log(`> Internal RabbitMQ WebSocket URL: ${runtimeConfig.internalRabbitmqWsUrl}`);
+        console.log('> Client uses fixed paths: /api and /rabbitmq/ws');
     });
 });

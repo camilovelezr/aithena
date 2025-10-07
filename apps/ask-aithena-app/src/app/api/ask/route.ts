@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { request } from 'undici';
-import { API_URL } from '@/lib/server/config';
+import { INTERNAL_API_URL } from '@/lib/server/config';
 import { apiLogger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
     try {
         const { query, mode, sessionId, similarity_n, languages, start_year, end_year } = await req.json();
         
-        // Make the request server-side using undici
-        const { body, statusCode, headers } = await request(`${API_URL}/${mode}/ask`, {
+        // Make the request server-side using undici to internal service
+        const { body, statusCode, headers } = await request(`${INTERNAL_API_URL}/${mode}/ask`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
