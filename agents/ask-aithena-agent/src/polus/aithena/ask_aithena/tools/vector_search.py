@@ -6,9 +6,9 @@ from polus.aithena.ask_aithena.config import (
     ARCTIC_HOST,
     ARCTIC_PORT,
     HTTPX_TIMEOUT,
+    AITHENA_LOG_LEVEL,
 )
 from polus.aithena.ask_aithena.logfire_logger import logfire
-from polus.aithena.common.logger import get_logger
 from faststream.rabbit import RabbitBroker
 from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_exchange,
@@ -16,11 +16,12 @@ from polus.aithena.ask_aithena.rabbit import (
     ProcessingStatus,
 )
 from polus.aithena.embeddings import ArcticClient, SNOWFLAKE_L_V2
-
+import logging
 from typing import Optional
 
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 ARCTIC_CLIENT = ArcticClient(host=ARCTIC_HOST, port=ARCTIC_PORT)
 

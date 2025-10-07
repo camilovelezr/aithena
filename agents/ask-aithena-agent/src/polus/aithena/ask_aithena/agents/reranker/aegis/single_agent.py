@@ -5,25 +5,24 @@ from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
     LITELLM_API_KEY,
 )
-
-from polus.aithena.common.logger import get_logger
+import logging
 from pydantic import Field, BaseModel
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import ModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.agents.reranker.aegis.tools import (
     robust_noun_phrase_overlap as robust_tool,
     simplified_ngram_overlap as simplified_tool,
 )
-from polus.aithena.ask_aithena.config import USE_LOGFIRE, AEGIS_REFEREE_MODEL, AEGIS_REFEREE_TEMPERATURE
+from polus.aithena.ask_aithena.config import USE_LOGFIRE, AEGIS_REFEREE_MODEL, AEGIS_REFEREE_TEMPERATURE, AITHENA_LOG_LEVEL
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
     logfire.instrument_openai()
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 PROMPTS_DIR = PROMPTS_DIR.joinpath("reranker", "referee")
 

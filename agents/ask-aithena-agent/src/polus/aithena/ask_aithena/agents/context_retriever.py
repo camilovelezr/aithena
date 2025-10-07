@@ -9,20 +9,22 @@ from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_queue,
     ProcessingStatus,
 )
-from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.tools.vector_search import (
     get_similar_works_async,
 )
 from faststream.rabbit.broker import RabbitBroker
+import logging
 from typing import Optional
 from polus.aithena.ask_aithena.logfire_logger import logfire
 from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.config import AITHENA_LOG_LEVEL
 
 if USE_LOGFIRE:
     logfire.instrument_openai()
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 
 async def retrieve_context(

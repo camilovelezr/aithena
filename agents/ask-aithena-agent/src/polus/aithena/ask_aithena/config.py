@@ -1,13 +1,16 @@
 """Configuration for Ask Aithena Agent."""
 
-from polus.aithena.common.logger import get_logger
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 import os
 
+AITHENA_LOG_LEVEL = os.getenv("AITHENA_LOG_LEVEL", "INFO")
+
 load_dotenv(override=True)
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 # logging
 USE_LOGFIRE = os.environ.get("USE_LOGFIRE", default="False").lower() == "true"
@@ -98,8 +101,6 @@ EMBEDDING_TABLE = os.environ.get("EMBEDDING_TABLE", "openalex.abstract_embedding
 SIMILARITY_N = int(os.environ.get("SIMILARITY_N", default=10))
 
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
-REDIS_URL = os.environ.get("REDIS_URL", default="redis://localhost:6379/0")
-SESSION_EXPIRATION_SECONDS = int(os.environ.get("SESSION_EXPIRATION_SECONDS", default=3600))
 
 # Consolidate configuration logging into a single structured log entry
 config_values = {
@@ -123,8 +124,6 @@ config_values = {
     "semantics_temperature": SEMANTICS_TEMPERATURE,
     "prompts_dir": PROMPTS_DIR,
     "rabbitmq_url": RABBITMQ_URL,
-    "redis_url": REDIS_URL,
-    "session_expiration_seconds": SESSION_EXPIRATION_SECONDS,
     "use_logfire": USE_LOGFIRE,
 }
 logger.debug("Configuration values: %s", config_values)

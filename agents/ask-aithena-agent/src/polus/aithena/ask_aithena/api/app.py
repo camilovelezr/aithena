@@ -31,8 +31,7 @@ from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_queue,
     ProcessingStatus,
 )
-from polus.aithena.ask_aithena.config import SIMILARITY_N, SESSION_EXPIRATION_SECONDS
-from polus.aithena.ask_aithena.redis_client import RedisClient, get_redis_client
+from polus.aithena.ask_aithena.config import SIMILARITY_N
 
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
@@ -77,16 +76,6 @@ async def _declare_exchanges_and_queues():
     finally:
         await rabbit_router.broker.close()
 
-async def _connect_redis():
-    """Connect to Redis."""
-    redis_client = await get_redis_client()
-    await redis_client.connect()
-
-async def _disconnect_redis():
-    """Disconnect from Redis."""
-    redis_client = await get_redis_client()
-    await redis_client.disconnect()
-
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -95,8 +84,7 @@ def create_application() -> FastAPI:
         title="Ask Aithena API",
         description="RESTful API for Ask Aithena",
         version="1.0.0",
-        on_startup=[_declare_exchanges_and_queues, _connect_redis],
-        on_shutdown=[_disconnect_redis],
+        on_startup=[_declare_exchanges_and_queues],
     )
 
     # Add CORS middleware
@@ -174,7 +162,6 @@ async def publish_status(broker, status: str, message: Optional[str], session_id
 async def owl_ask(
     request: AskRequest,
     x_session_id: str = Header(..., alias="X-Session-ID"),
-    redis_client: RedisClient = Depends(get_redis_client),
 ):
     """Ask Aithena API endpoint for the Owl level."""
     logger.info(f"Received Owl ask request: {request.query} for session {x_session_id}")
@@ -194,10 +181,6 @@ async def owl_ask(
     )
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context retrieved", context=context_.model_dump())
-
-    await redis_client.set_json(
-        session_id, context_.model_dump(), SESSION_EXPIRATION_SECONDS
-    )
 
     await publish_status(
         rabbit_router.broker,
@@ -229,7 +212,6 @@ async def owl_ask(
 async def shield_ask(
     request: AskRequest,
     x_session_id: str = Header(..., alias="X-Session-ID"),
-    redis_client: RedisClient = Depends(get_redis_client),
 ):
     """Ask Aithena API endpoint for the Shield level."""
     logger.info(f"Received Shield ask request: {request.query}")
@@ -260,9 +242,6 @@ async def shield_ask(
     context_ = await rerank_context(request.query, context_norank)
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context reranked", context=context_.model_dump())
-    await redis_client.set_json(
-        session_id, context_.model_dump(), SESSION_EXPIRATION_SECONDS
-    )
     await rabbit_router.broker.publish(
         ProcessingStatus(
             status="preparing_response",
@@ -301,7 +280,6 @@ async def shield_ask(
 async def aegis_ask(
     request: AskRequest,
     x_session_id: str = Header(..., alias="X-Session-ID"),
-    redis_client: RedisClient = Depends(get_redis_client),
 ):
     """Ask Aithena API endpoint for the Aegis level."""
     logger.info(f"Received Aegis ask request: {request.query}")
@@ -325,9 +303,6 @@ async def aegis_ask(
     )
     logger.info(f"Context: {context_.model_dump_json()}")
     logfire.info("Context reranked", context=context_.model_dump())
-    await redis_client.set_json(
-        session_id, context_.model_dump(), SESSION_EXPIRATION_SECONDS
-    )
     await rabbit_router.broker.publish(
         ProcessingStatus(
             status="preparing_response",
@@ -360,36 +335,35 @@ async def aegis_ask(
         run_responder(request.query, context_), media_type="text/event-stream"
     )
 
-@app.post("/talker/talk")
-async def talker_talk(
-    request: TalkerRequest,
-    x_session_id: str = Header(..., alias="X-Session-ID"),
-    redis_client: RedisClient = Depends(get_redis_client),
-):
-    """Ask Aithena API endpoint for the Talker level."""
-    session_id = f"session.{x_session_id}"
-    logger.info(f"Received Talker talk request for session {session_id}")
-    logfire.info("Received Talker talk request", history_length=len(request.history), session_id=session_id)
+# @app.post("/talker/talk")
+# async def talker_talk(
+#     request: TalkerRequest,
+#     x_session_id: str = Header(..., alias="X-Session-ID"),
+# ):
+#     """Ask Aithena API endpoint for the Talker level."""
+#     session_id = f"session.{x_session_id}"
+#     logger.info(f"Received Talker talk request for session {session_id}")
+#     logfire.info("Received Talker talk request", history_length=len(request.history), session_id=session_id)
 
-    context_data = await redis_client.get_json(session_id)
-    if not context_data:
-        raise HTTPException(status_code=404, detail="Session context not found. Please start a new conversation.")
+#     context_data = await redis_client.get_json(session_id)
+#     if not context_data:
+#         raise HTTPException(status_code=404, detail="Session context not found. Please start a new conversation.")
 
-    context = Context.model_validate(context_data)
+#     context = Context.model_validate(context_data)
 
-    async def run_talker(context: Context):
-        async with talker_agent.run_stream(
-            f"""
-            {context.to_llm_context()}
-            <history>{json.dumps(request.history)}</history>
-            """
-        ) as response:
-            async for message in response.stream_text(delta=True):
-                yield message
+#     async def run_talker(context: Context):
+#         async with talker_agent.run_stream(
+#             f"""
+#             {context.to_llm_context()}
+#             <history>{json.dumps(request.history)}</history>
+#             """
+#         ) as response:
+#             async for message in response.stream_text(delta=True):
+#                 yield message
 
-    return StreamingResponse(
-        run_talker(context), media_type="text/event-stream"
-    )
+#     return StreamingResponse(
+#         run_talker(context), media_type="text/event-stream"
+#     )
 
 @app.post("/get-articles")
 async def get_articles(

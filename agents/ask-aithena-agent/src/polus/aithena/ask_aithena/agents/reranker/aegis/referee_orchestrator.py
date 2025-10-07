@@ -1,21 +1,20 @@
 """Reranker Agent Referee Orchestrator"""
 
 from pathlib import Path
-
+import logging
 
 from polus.aithena.ask_aithena.config import (
     PROMPTS_DIR,
     LITELLM_URL,
     LITELLM_API_KEY,
+    AITHENA_LOG_LEVEL,
 )
 
-from polus.aithena.common.logger import get_logger
 from pydantic import Field, BaseModel, ConfigDict
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import ModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from polus.aithena.common.logger import get_logger
 from polus.aithena.ask_aithena.models import Context
 from polus.aithena.ask_aithena.agents.reranker.aegis.single_agent import (
     referee_agent,
@@ -34,7 +33,8 @@ from polus.aithena.ask_aithena.logfire_logger import logfire
 if USE_LOGFIRE:
     logfire.instrument_openai()
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 PROMPT = Path(PROMPTS_DIR, "reranker", "referee", "orchestrator.txt").read_text()
 

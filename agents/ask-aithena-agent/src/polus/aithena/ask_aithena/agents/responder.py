@@ -4,6 +4,7 @@ It is an agent that will respond to a user query.
 """
 
 from pathlib import Path
+import logging
 
 from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
@@ -14,15 +15,15 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
-from polus.aithena.common.logger import get_logger
-from polus.aithena.ask_aithena.config import RESPONDER_MODEL, RESPONDER_MODEL_PARAMS
+from polus.aithena.ask_aithena.config import RESPONDER_MODEL, RESPONDER_MODEL_PARAMS, AITHENA_LOG_LEVEL
 from polus.aithena.ask_aithena.config import USE_LOGFIRE
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
     logfire.instrument_openai()
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 PROMPT = Path(PROMPTS_DIR, "responder.txt").read_text()
 

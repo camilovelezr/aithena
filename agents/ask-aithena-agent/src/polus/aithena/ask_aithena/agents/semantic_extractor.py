@@ -5,7 +5,7 @@ It is a self-supervised agent that will extract a sentence from a user query.
 
 from pathlib import Path
 from typing import Optional
-
+import logging
 from pydantic import Field, BaseModel
 from polus.aithena.ask_aithena.config import (
     LITELLM_URL,
@@ -18,20 +18,20 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.settings import ModelSettings
-from polus.aithena.common.logger import get_logger
 from faststream.rabbit import RabbitBroker
 from polus.aithena.ask_aithena.rabbit import (
     ask_aithena_exchange,
     ask_aithena_queue,
     ProcessingStatus,
 )
-from polus.aithena.ask_aithena.config import USE_LOGFIRE
+from polus.aithena.ask_aithena.config import USE_LOGFIRE, AITHENA_LOG_LEVEL
 from polus.aithena.ask_aithena.logfire_logger import logfire
 
 if USE_LOGFIRE:
     logfire.instrument_openai()
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 PROMPTS_DIR = PROMPTS_DIR.joinpath("semantics")
 EXTRACT_SEMANTICS_AGENT_PROMPT = Path(PROMPTS_DIR, "extract_agent.txt").read_text()
