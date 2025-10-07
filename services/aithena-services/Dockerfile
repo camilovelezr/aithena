@@ -2,21 +2,26 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Environment variables
 ENV AITHENA_LOG_LEVEL="DEBUG"
-ENV EXEC_DIR="/opt/executables"
-WORKDIR ${EXEC_DIR}
-
-
-# Copy the required directories
-COPY common ${EXEC_DIR}/aithena/common
-COPY services/aithena-services ${EXEC_DIR}/aithena/services/aithena-services
-
 
 # Set environment variables to avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-WORKDIR ${EXEC_DIR}/aithena/services/aithena-services
-# Install the tool using uv
+# Create a non-root user and switch to it
+RUN useradd -m -u 1000 user
+USER user
+
+# Set working directory inside user's home
+WORKDIR /home/user/app
+
+# Copy project definition and lock file
+COPY --chown=user:user ./pyproject.toml ./uv.lock ./
+# Copy the README file
+COPY --chown=user:user ./README.md ./README.md
+# Install dependencies
 RUN uv sync
+
+# Copy the rest of the application
+COPY --chown=user:user ./src ./src
 
 # Expose the application port
 EXPOSE 8000

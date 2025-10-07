@@ -1,10 +1,12 @@
 import os
-from pathlib import Path
+import logging
 
 from dotenv import find_dotenv, load_dotenv
-from polus.aithena.common.logger import get_logger
 
-logger = get_logger(__file__)
+AITHENA_LOG_LEVEL = os.getenv("AITHENA_LOG_LEVEL", "INFO")
+
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 load_dotenv(find_dotenv(), override=True)
 logger.info(f"Loaded environment variables from {find_dotenv()}")
@@ -35,4 +37,5 @@ __all__ = [
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "POSTGRES_DB",
+    "AITHENA_LOG_LEVEL",
 ]

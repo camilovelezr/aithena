@@ -4,7 +4,9 @@
 # pylint: disable=W1203, C0412, C0103, W0212, W0707, W0718
 
 from contextlib import asynccontextmanager
+import logging
 
+from aithena_services.config import AITHENA_LOG_LEVEL
 from aithena_services.memory.pgvector import (
     close_pool,
     init_pool,
@@ -12,11 +14,10 @@ from aithena_services.memory.pgvector import (
     get_article_by_doi,
 )
 from fastapi import FastAPI, HTTPException
-from polus.aithena.common.logger import get_logger
-from polus.aithena.common.utils import time_logger
 from pydantic import BaseModel
 
-logger = get_logger("aithena_services.api")
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 
 @asynccontextmanager
@@ -69,7 +70,6 @@ async def health():
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
 
-@time_logger
 @app.post("/memory/pgvector/search_works")
 async def search_works_pgvector(request: WorksSearchRequest):
     """

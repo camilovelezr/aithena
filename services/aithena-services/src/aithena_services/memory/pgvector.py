@@ -1,6 +1,7 @@
 # mypy: disable-error-code="import-untyped"
 # pylint: disable=E1129, W1203
 """pgvector database utilities for aithena-services."""
+import logging
 from typing import Optional
 
 import asyncpg
@@ -12,10 +13,11 @@ from aithena_services.config import (
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_USER,
+    AITHENA_LOG_LEVEL,
 )
-from polus.aithena.common.logger import get_logger
 
-logger = get_logger("aithena_services.memory.pgvector")
+logger = logging.getLogger(__name__)
+logger.setLevel(AITHENA_LOG_LEVEL)
 
 # Connection pool - will be initialized at startup
 _pool: Optional[asyncpg.Pool] = None
