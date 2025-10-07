@@ -1,11 +1,15 @@
 .vscode
 **/.venv/
 .mypy_cache
+<<<<<<< HEAD
 *.env
 **/.env
 **/**/.env
 **/**/**/.env
 .env.*
+=======
+.env
+>>>>>>> main
 
 #logs
 *.out

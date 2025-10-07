@@ -59,4 +59,10 @@ build-backend = "hatchling.build"
 pythonpath = [
   ".",
 ]
+<<<<<<< HEAD
 asyncio_mode = "auto"
+=======
+
+[tool.poetry.scripts]
+get-openalex = "polus.aithena.jobs.getopenalex.__main__:app"
+>>>>>>> main
