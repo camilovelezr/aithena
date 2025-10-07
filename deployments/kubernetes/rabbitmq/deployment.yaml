@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: rabbitmq
-        image: rabbitmq:4.0.7-management-alpine
+        image: rabbitmq:4.1.2-management
         ports:
         - containerPort: 5672  # AMQP port
         - containerPort: 15672 # Management interface
@@ -26,3 +26,11 @@ spec:
           value: "guest"
         - name: HOSTNAME
           value: "my-rabbit"
+        volumeMounts:
+        - name: plugins-config
+          mountPath: /etc/rabbitmq/enabled_plugins
+          subPath: enabled_plugins
+      volumes:
+      - name: plugins-config
+        configMap:
+          name: rabbitmq-plugins

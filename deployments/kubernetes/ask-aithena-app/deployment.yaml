@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ask-aithena-app
+  namespace: box
   labels:
     app: ask-aithena-app
 spec:
@@ -16,7 +17,7 @@ spec:
     spec:
       containers:
       - name: ask-aithena-app
-        image: camilovelezr/ask-aithena-app:1.0.0-dev1
+        image: camilovelezr/ask-aithena-app:1.1.4
         imagePullPolicy: Always
         ports:
         - containerPort: 3000

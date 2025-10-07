@@ -11,5 +11,5 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: standard
   hostPath:
-    path: "/polus2/velezramirezc2/.data/litellm_config/config.yaml"
-    type: File
+    path: "/polus2/velezramirezc2/.data/litellm_config"
+    type: DirectoryOrCreate

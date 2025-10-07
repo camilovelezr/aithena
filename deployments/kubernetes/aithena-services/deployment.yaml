@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: aithena-services
+  namespace: box
 spec:
   replicas: 1
   selector:
@@ -14,18 +15,19 @@ spec:
     spec:
       containers:
       - name: aithena-services
-        image: camilovelezr/aithena-services:1.0.0-dev0
+        image: camilovelezr/aithena-services:1.1.2
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:
         - name: POSTGRES_HOST
-          value: service-pg-postgres-db-chart
+          value: askaithena-db
         - name: POSTGRES_PORT
           value: "5432"
         - name: POSTGRES_USER
-          value: "oa_user"
+          value: "AithenaAdmin"
         - name: POSTGRES_DB
-          value: "aithenadb"
+          value: "askaithena"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:

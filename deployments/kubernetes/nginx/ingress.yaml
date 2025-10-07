@@ -6,12 +6,12 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "600"
-    nginx.ingress.kubernetes.io/client-header-timeout: "600"
-    nginx.ingress.kubernetes.io/client-body-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "2700"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "2700"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "2700"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "2700"
+    nginx.ingress.kubernetes.io/client-header-timeout: "2700"
+    nginx.ingress.kubernetes.io/client-body-timeout: "2700"
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
 spec:

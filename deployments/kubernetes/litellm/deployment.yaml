@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: litellm
+  namespace: box
 spec:
   replicas: 1
   selector:
@@ -14,7 +15,7 @@ spec:
     spec:
       containers:
       - name: litellm
-        image: ghcr.io/berriai/litellm:main-v1.63.14-stable.patch1
+        image: ghcr.io/berriai/litellm:litellm_stable_release_branch-v1.75.8-stable
         ports:
         - containerPort: 4000
         env:
@@ -36,10 +37,10 @@ spec:
               key: AZURE_API_BASE
         volumeMounts:
         - name: config-volume
-          mountPath: /app/config.yaml
+          mountPath: /app/config
         args:
         - "--port=4000"
-        - "--config=/app/config.yaml"
+        - "--config=/app/config/config.yaml"
         readinessProbe:
           httpGet:
             path: /health/readiness

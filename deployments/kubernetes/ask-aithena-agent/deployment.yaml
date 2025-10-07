@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ask-aithena-agent
+  namespace: box
 spec:
   replicas: 1
   selector:
@@ -14,7 +15,7 @@ spec:
     spec:
       containers:
       - name: ask-aithena-agent
-        image: camilovelezr/ask-aithena-agent:1.0.0-dev1
+        image: camilovelezr/ask-aithena-agent:1.1.2
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -31,26 +32,46 @@ spec:
               key: litellm_api_key
         - name: USE_LOGFIRE
           value: "false"
-        - name: CHAT_MODEL
-          value: "azure-gpt-4.5"
-        - name: CHAT_MODEL_TEMPERATURE
-          value: "0.3"
+        - name: RESPONDER_MODEL
+          value: "gpt-4.1"
+        - name: RESPONDER_MODEL_TEMPERATURE
+          value: "0.4"
+        - name: TALKER_MODEL
+          value: "gpt-4.1"
+        - name: TALKER_MODEL_TEMPERATURE
+          value: "0.85"
         - name: SEMANTICS_MODEL
-          value: "llama3.2" 
+          value: "gpt-4.1"
         - name: SEMANTICS_TEMPERATURE
-          value: "0.2"
-        - name: RERANK_MODEL
-          value: "azure-gpt-4o"
-        - name: RERANK_TEMPERATURE
-          value: "0.2"
-        - name: EMBED_MODEL
-          value: "nomic"
+          value: "0.4"
+        - name: AEGIS_ORCHESTRATOR_MODEL
+          value: "o3"
+        - name: AEGIS_ORCHESTRATOR_TEMPERATURE
+          value: "1"
+        - name: AEGIS_REFEREE_MODEL
+          value: "o3"
+        - name: AEGIS_REFEREE_TEMPERATURE
+          value: "1"
+        - name: SHIELD_MODEL
+          value: "o4-mini"
+        - name: SHIELD_TEMPERATURE
+          value: "1"
         - name: EMBEDDING_TABLE
-          value: "openalex.nomic_embed_text_768"
+          value: "openalex.abstract_embeddings_arctic"
         - name: PROMPTS_DIR
           value: "/opt/prompts"
         - name: RABBITMQ_URL
           value: "amqp://guest:guest@rabbitmq-service:5672/"
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: SESSION_EXPIRATION_SECONDS
+          value: "3600"
+        - name: ARCTIC_HOST
+          value: "arctic-direct-0-svc"
+        - name: ARCTIC_PORT
+          value: "8000"
+        - name: HTTPX_TIMEOUT
+          value: "60"
         readinessProbe:
           httpGet:
             path: /health

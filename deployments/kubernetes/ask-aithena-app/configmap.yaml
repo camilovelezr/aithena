@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: ask-aithena-app-config
 data:
+  # Environment setting
+  APP_ENV: production
   # Internal service URLs (for server-side)
   API_URL: http://ask-aithena-agent-service:8000
   RABBITMQ_WS_URL: ws://rabbitmq-service:15674/ws

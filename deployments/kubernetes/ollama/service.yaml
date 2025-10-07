@@ -8,7 +8,7 @@ spec:
   ports:
   - port: 11434
     targetPort: 11434
-    nodePort: 32101
+    nodePort: 32141
     protocol: TCP
     name: http
   type: NodePort 
