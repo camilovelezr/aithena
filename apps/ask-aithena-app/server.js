@@ -66,7 +66,6 @@ console.log('Public paths: /api → API proxy, /rabbitmq/ws → WebSocket proxy'
 const wsProxy = httpProxy.createProxyServer({
     ws: true,
     changeOrigin: true,
-    target: runtimeConfig.internalRabbitmqWsUrl,
     // Timeout configurations
     proxyTimeout: 3600000, // 1 hour
     timeout: 3600000, // 1 hour
@@ -145,15 +144,34 @@ app.prepare().then(() => {
             console.log('Original path:', parsedUrl.pathname);
             console.log('Headers:', req.headers);
             
-            // Forward the request to RabbitMQ
-            wsProxy.ws(req, socket, head, {
-                target: runtimeConfig.internalRabbitmqWsUrl
-            }, function(err) {
-                if (err) {
-                    console.error('Error during WebSocket proxy:', err);
-                    socket.end();
-                }
+            // Add error handler to socket before proxying
+            socket.on('error', function(err) {
+                console.error('Socket error during WebSocket upgrade:', err);
             });
+            
+            try {
+                // The target should be the base URL without the /ws path
+                // because the request already has /rabbitmq/ws which we'll rewrite to /ws
+                const targetUrl = runtimeConfig.internalRabbitmqWsUrl.replace('/ws', '');
+                
+                // Rewrite the path from /rabbitmq/ws to /ws for RabbitMQ
+                req.url = '/ws';
+                
+                console.log('Proxying WebSocket with rewritten path:', {
+                    originalPath: parsedUrl.pathname,
+                    newPath: req.url,
+                    target: targetUrl
+                });
+                
+                // Forward the request to RabbitMQ
+                wsProxy.ws(req, socket, head, {
+                    target: targetUrl
+                });
+                console.log('WebSocket proxy initiated successfully');
+            } catch (err) {
+                console.error('Error initiating WebSocket proxy:', err);
+                socket.destroy();
+            }
         } else {
             console.log('Unknown WebSocket path:', parsedUrl.pathname);
             socket.destroy();

@@ -1,6 +1,6 @@
 {
     "name": "ask-aithena-app",
-    "version": "1.2.0",
+    "version": "1.2.0-dev3",
     "private": true,
     "scripts": {
         "dev": "node server.js",
